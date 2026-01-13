@@ -5,6 +5,9 @@ config :rbac_app,
 
 #  ash_domains: [RbacApp.Accounts, RbacApp.RBAC]
 
+config :rbac_app,
+  ash_domains: [RbacApp.Accounts, RbacApp.RBAC]
+
 config :rbac_app, RbacApp.Repo,
   migration_primary_key: [name: :id, type: :binary_id],
   migration_foreign_key: [type: :binary_id]
@@ -84,7 +87,28 @@ config :ash_admin, :actor_plug, RbacAppWeb.AshAdminActorPlug
 #
 #
 
-config :esbuild, version: "0.25.0"
+
+
+config :esbuild,
+  version: "0.25.0",
+  rbac_app: [
+    args:
+      ~w(
+        js/app.js
+        --bundle
+        --target=es2022
+        --outdir=../priv/static/assets
+        --external:/fonts/*
+        --external:/images/*
+        --alias:@=.
+      ),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{
+      "NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]
+    }
+  ]
+# 1st version
+# config :esbuild, version: "0.25.0"
 
 config :tailwind, version: "4.1.12"
 
@@ -98,6 +122,7 @@ config :esbuild,
   ]
 
 config :tailwind,
+  version: "4.1.12",
   rbac_app: [
     args: ~w(
       --input=css/app.css
@@ -105,5 +130,18 @@ config :tailwind,
     ),
     cd: Path.expand("../assets", __DIR__)
   ]
+
+# 1st version
+# config :tailwind,
+#   rbac_app: [
+#     args: ~w(
+#       --input=css/app.css
+#       --output=../priv/static/assets/app.css
+#     ),
+#     cd: Path.expand("../assets", __DIR__)
+#   ]
+
+config :phoenix_live_view, :colocated_js,
+  target_directory: Path.expand("../assets/node_modules/phoenix-colocated", __DIR__)
 
 import_config "#{config_env()}.exs"
