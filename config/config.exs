@@ -1,7 +1,9 @@
 import Config
 
 config :rbac_app,
-  ash_domains: [RbacApp.Accounts, RbacApp.RBAC]
+  ecto_repos: [RbacApp.Repo]
+
+#  ash_domains: [RbacApp.Accounts, RbacApp.RBAC]
 
 config :rbac_app, RbacApp.Repo,
   migration_primary_key: [name: :id, type: :binary_id],

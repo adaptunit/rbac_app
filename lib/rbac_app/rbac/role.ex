@@ -1,4 +1,4 @@
-efmodule RbacApp.RBAC.Role do
+defmodule RbacApp.RBAC.Role do
   use Ash.Resource,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
@@ -35,22 +35,40 @@ efmodule RbacApp.RBAC.Role do
   end
 
   actions do
-    defaults([:read, :create, :update, :destroy])
+    defaults([:read, :destroy])
 
     create :create do
       accept([:role_name, :description, :permissions])
     end
 
-    update :update do
+    update :edit do
       accept([:role_name, :description, :permissions])
     end
   end
 
+  # actions do
+  #   defaults([:read, :create, :update, :destroy])
+
+  #   create :create do
+  #     accept([:role_name, :description, :permissions])
+  #   end
+
+  #   update :update do
+  #     accept([:role_name, :description, :permissions])
+  #   end
+  # end
+
   policies do
-    # Only RBAC admins manage roles
     policy always() do
-      authorize_if(RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*")
-      forbid_if(always())
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*"})
     end
   end
+
+  # policies do
+  #   # Only RBAC admins manage roles
+  #   policy always() do
+  #     authorize_if(RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*")
+  #     forbid_if(always())
+  #   end
+  # end
 end

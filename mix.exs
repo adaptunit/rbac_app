@@ -65,6 +65,16 @@ defmodule RbacApp.MixProject do
       {:oban, "~> 2.19"},
       {:ash_oban, "~> 0.7"},
 
+      # Mailer (Phoenix generator uses Swoosh.Mailer)
+      {:swoosh, "~> 1.16"},
+      {:finch, "~> 0.18"},
+
+      # Phoenix LiveDashboard
+      {:phoenix_live_dashboard, "~> 0.8"},
+
+      # Phoenix telemetry module uses Telemetry.Metrics
+      {:telemetry_metrics, "~> 1.0"},
+      {:telemetry_poller, "~> 1.0"},
       # Quality
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false}

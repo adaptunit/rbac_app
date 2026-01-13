@@ -51,7 +51,7 @@ defmodule RbacApp.Accounts.Person do
   end
 
   actions do
-    defaults([:read, :create, :update, :destroy])
+    defaults([:read, :destroy])
 
     create :create do
       accept([
@@ -78,7 +78,7 @@ defmodule RbacApp.Accounts.Person do
       ])
     end
 
-    update :update do
+    update :edit do
       accept([
         :first_name,
         :last_name,
@@ -103,19 +103,84 @@ defmodule RbacApp.Accounts.Person do
     end
   end
 
+  # actions do
+  #   defaults([:read, :create, :update, :destroy])
+
+  #   create :create do
+  #     accept([
+  #       :user_id,
+  #       :first_name,
+  #       :last_name,
+  #       :middle_name,
+  #       :gender,
+  #       :birthdate,
+  #       :nationality,
+  #       :phone,
+  #       :phone_alt,
+  #       :email_alt,
+  #       :address_line1,
+  #       :address_line2,
+  #       :city,
+  #       :region,
+  #       :postal_code,
+  #       :country,
+  #       :emergency_contact,
+  #       :children,
+  #       :notes,
+  #       :metadata
+  #     ])
+  #   end
+
+  #   update :update do
+  #     accept([
+  #       :first_name,
+  #       :last_name,
+  #       :middle_name,
+  #       :gender,
+  #       :birthdate,
+  #       :nationality,
+  #       :phone,
+  #       :phone_alt,
+  #       :email_alt,
+  #       :address_line1,
+  #       :address_line2,
+  #       :city,
+  #       :region,
+  #       :postal_code,
+  #       :country,
+  #       :emergency_contact,
+  #       :children,
+  #       :notes,
+  #       :metadata
+  #     ])
+  #   end
+  # end
+
   policies do
-    # Admin can do everything on Person
-    policy action_type(:*) do
-      authorize_if(RbacApp.Auth.Checks.HasPermission, permission: "accounts.person:*")
+    # RBAC: if the actor has a role granting "accounts.person:*", allow everything and skip other policies.
+    bypass always() do
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "accounts.person:*"})
     end
 
-    # Users can read/update their own Person
+    # Self-access: a user may read/update their own Person row
     policy action_type([:read, :update]) do
       authorize_if(expr(user_id == ^actor(:id)))
     end
-
-    policy always() do
-      forbid_if(always())
-    end
   end
+
+  # policies do
+  #   # Admin can do everything on Person
+  #   policy action_type(:*) do
+  #     authorize_if(RbacApp.Auth.Checks.HasPermission, permission: "accounts.person:*")
+  #   end
+
+  #   # Users can read/update their own Person
+  #   policy action_type([:read, :update]) do
+  #     authorize_if(expr(user_id == ^actor(:id)))
+  #   end
+
+  #   policy always() do
+  #     forbid_if(always())
+  #   end
+  # end
 end

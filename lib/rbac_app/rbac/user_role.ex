@@ -30,17 +30,31 @@ defmodule RbacApp.RBAC.UserRole do
   end
 
   actions do
-    defaults([:read, :create, :destroy])
+    defaults([:read, :destroy])
 
-    create :create do
+    create :assign do
       accept([:user_id, :role_id])
     end
   end
 
+  # actions do
+  #   defaults([:read, :create, :destroy])
+
+  #   create :create do
+  #     accept([:user_id, :role_id])
+  #   end
+  # end
+
   policies do
     policy always() do
-      authorize_if(RbacApp.Auth.Checks.HasPermission, permission: "rbac.user_role:*")
-      forbid_if(always())
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.user_role:*"})
     end
   end
+
+  # policies do
+  #   policy always() do
+  #     authorize_if(RbacApp.Auth.Checks.HasPermission, permission: "rbac.user_role:*")
+  #     forbid_if(always())
+  #   end
+  # end
 end
