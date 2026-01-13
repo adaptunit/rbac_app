@@ -77,7 +77,10 @@ defmodule RbacApp.MixProject do
       {:telemetry_poller, "~> 1.0"},
       # Quality
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:picosat_elixir, "~> 0.2"}
       # {:phoenix, "~> 1.8.3"},
       # {:phoenix_ecto, "~> 4.5"},
       # {:ecto_sql, "~> 3.13"},

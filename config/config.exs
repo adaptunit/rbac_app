@@ -81,4 +81,29 @@ config :ash_admin, :actor_plug, RbacAppWeb.AshAdminActorPlug
 
 # # Import environment specific config. This must remain at the bottom
 # # of this file so it overrides the configuration defined above.
-# import_config "#{config_env()}.exs"
+#
+#
+
+config :esbuild, version: "0.25.0"
+
+config :tailwind, version: "4.1.12"
+
+# --- Profiles used by watchers in dev.exs ---
+config :esbuild,
+  rbac_app: [
+    args:
+      ~w(js/app.js --bundle --target=es2017 --sourcemap=inline --outdir=../priv/static/assets),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+  ]
+
+config :tailwind,
+  rbac_app: [
+    args: ~w(
+      --input=css/app.css
+      --output=../priv/static/assets/app.css
+    ),
+    cd: Path.expand("../assets", __DIR__)
+  ]
+
+import_config "#{config_env()}.exs"

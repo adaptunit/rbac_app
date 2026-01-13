@@ -53,6 +53,9 @@ defmodule RbacApp.Accounts.User do
   end
 
   authentication do
+    # +1 next steps
+    session_identifier(:jti)
+
     tokens do
       enabled?(true)
       token_resource(RbacApp.Accounts.Token)

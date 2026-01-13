@@ -7,6 +7,9 @@ services:
       POSTGRES_DB: rbac_app_dev
     ports:
       - "5432:5432"
+    networks:
+      - frontend
+      - backend
 
   hasura:
     image: hasura/graphql-engine:v2.48.9
@@ -21,4 +24,19 @@ services:
       HASURA_GRAPHQL_ADMIN_SECRET: "dev-secret"
       # JWT mode: configure to read claims namespace
       HASURA_GRAPHQL_JWT_SECRET: >
-        {"type":"HS256","key":"dev-token-signing-secret","claims_namespace_path":"$.https://hasura.io/jwt/claims"}
+        {"type":"HS256","key":"YWRiZGNiMDZlYzRjYmEyYjVlOWNmZTQ0","claims_namespace_path":"$$[\"https://hasura.io/jwt/claims\"]","claims_format":"json"}
+    networks:
+      - frontend
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+# {"type":"HS256","key":"dev-token-signing-secret","claims_namespace_path":"$.https://hasura.io/jwt/claims"}
+volumes:
+  hasura:
+    driver: local
+  db:
+    driver: local
