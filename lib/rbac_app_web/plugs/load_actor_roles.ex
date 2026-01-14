@@ -10,7 +10,7 @@ defmodule RbacAppWeb.Plugs.LoadActorRoles do
         conn
 
       user ->
-        user = Ash.load!(user, :roles, domain: RbacApp.RBAC)
+        user = Ash.load!(user, :roles, domain: RbacApp.RBAC, authorize?: false)
         assign(conn, :current_user, user)
     end
   end
