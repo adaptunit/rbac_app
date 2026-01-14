@@ -12,7 +12,8 @@ if config_env() == :prod do
 
   config :rbac_app, RbacAppWeb.Endpoint,
     http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT", "4000"))],
-    secret_key_base: secret_key_base
+    secret_key_base: secret_key_base,
+    live_view: [signing_salt: System.get_env("LIVE_VIEW_SIGNING_SALT") || "3whCchBK3+vEJezmJOhrbml1WnRzMvwjBx7HyhYXt5LW8WcrW8FBXHLctpqpLdbD"]
 
   # Used by AshAuthentication token signing :contentReference[oaicite:14]{index=14}
   config :rbac_app, :token_signing_secret, System.fetch_env!("TOKEN_SIGNING_SECRET")

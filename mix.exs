@@ -50,6 +50,7 @@ defmodule RbacApp.MixProject do
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.7"},
 
+      {:igniter, "~> 0.7", only: [:dev, :test]},
       # Ash stack
       {:ash, "~> 3.12"},
       {:ash_postgres, "~> 2.6"},
