@@ -43,7 +43,17 @@ defmodule RbacApp.Accounts.User do
   end
 
   actions do
-    defaults([:read])
+    defaults([:read, :destroy])
+
+    create :create do
+      accept([:email, :is_active])
+      argument(:password, :string, allow_nil?: false, sensitive?: true)
+      change(AshAuthentication.Strategy.Password.HashPassword)
+    end
+
+    update :edit do
+      accept([:email, :is_active])
+    end
 
     read :get_by_subject do
       argument(:subject, :string, allow_nil?: false)
@@ -80,8 +90,12 @@ defmodule RbacApp.Accounts.User do
       authorize_if(always())
     end
 
+    policy action_type(:read) do
+      authorize_if(expr(id == ^actor(:id)))
+    end
+
     policy always() do
-      forbid_if(always())
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "accounts.user:*"})
     end
   end
 end

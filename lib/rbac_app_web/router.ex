@@ -12,6 +12,7 @@ defmodule RbacAppWeb.Router do
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(:load_from_session)
+    plug(RbacAppWeb.Plugs.LoadActorRoles)
   end
 
   pipeline :api do
@@ -50,7 +51,9 @@ defmodule RbacAppWeb.Router do
 
     ash_authentication_live_session :authentication_required,
       on_mount: [{RbacAppWeb.LiveUserAuth, :live_user_required}] do
-      # live "/admin", AdminLive, :index
+      live("/admin", Admin.DashboardLive, :index)
+      live("/admin/users", Admin.UsersLive, :index)
+      live("/admin/roles", Admin.RolesLive, :index)
     end
   end
 
