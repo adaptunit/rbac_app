@@ -12,6 +12,9 @@ config :rbac_app, RbacApp.Repo,
   migration_primary_key: [name: :id, type: :binary_id],
   migration_foreign_key: [type: :binary_id]
 
+config :rbac_app, RbacAppWeb.Endpoint,
+  pubsub_server: RbacApp.PubSub
+
 config :rbac_app, Oban,
   repo: RbacApp.Repo,
   plugins: [Oban.Plugins.Pruner],
