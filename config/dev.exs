@@ -30,6 +30,10 @@ config :rbac_app, RbacAppWeb.Endpoint,
     tailwind: {Tailwind, :install_and_run, [:rbac_app, ~w(--watch)]}
   ]
 
+# Used by AshAuthentication token signing
+config :rbac_app, :token_signing_secret,
+  System.get_env("TOKEN_SIGNING_SECRET", "dev-token-signing-secret")
+
 # ## SSL Support
 #
 # In order to use HTTPS in development, a self-signed
