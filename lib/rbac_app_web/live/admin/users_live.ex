@@ -1,6 +1,8 @@
 defmodule RbacAppWeb.Admin.UsersLive do
   use RbacAppWeb, :live_view
 
+  require Ash.Query
+
   alias RbacApp.Accounts.{Person, User}
   alias RbacApp.RBAC.{Role, UserRole}
 

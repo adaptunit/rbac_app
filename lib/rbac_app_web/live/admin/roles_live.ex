@@ -1,6 +1,8 @@
 defmodule RbacAppWeb.Admin.RolesLive do
   use RbacAppWeb, :live_view
 
+  require Ash.Query
+
   alias RbacApp.RBAC.Role
 
   @default_permissions """
