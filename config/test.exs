@@ -20,6 +20,10 @@ config :rbac_app, RbacAppWeb.Endpoint,
   secret_key_base: "JBx6A9MpZ25f2Do2uWaKFh8bS9Xupogz12yyYBloBRk/StOIVBPR0NnMDZbwUffw",
   server: false
 
+# Used by AshAuthentication token signing
+config :rbac_app, :token_signing_secret,
+  System.get_env("TOKEN_SIGNING_SECRET", "test-token-signing-secret")
+
 # In test we don't send emails
 config :rbac_app, RbacApp.Mailer, adapter: Swoosh.Adapters.Test
 
