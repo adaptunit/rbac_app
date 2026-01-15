@@ -23,9 +23,14 @@ defmodule RbacAppWeb.Admin.RolesLive do
       |> assign_new(:current_scope, fn -> nil end)
       |> assign(:page, :roles)
       |> assign(:roles_count, length(roles))
+      |> assign(:role_options, role_options(roles))
       |> assign(:default_permissions, String.trim(@default_permissions))
       |> assign(:roles_form, build_role_form())
+      |> assign(:role_select_form, build_role_select_form())
+      |> assign(:role_edit_form, build_role_edit_form())
+      |> assign(:selected_role_id, nil)
       |> assign(:roles_error, nil)
+      |> assign(:edit_error, nil)
       |> stream(:roles, roles)
 
     {:ok, socket}
@@ -154,6 +159,58 @@ defmodule RbacAppWeb.Admin.RolesLive do
               </.form>
             </section>
 
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-900">Edit role</h2>
+              <p class="mt-2 text-sm text-slate-600">
+                Refine permissions or rename a role without leaving the catalog.
+              </p>
+
+              <.form
+                for={@role_select_form}
+                id="role-edit-select-form"
+                phx-change="load_role"
+                class="mt-4"
+              >
+                <.input
+                  field={@role_select_form[:role_id]}
+                  type="select"
+                  label="Select role"
+                  options={@role_options}
+                  prompt="Choose a role"
+                />
+              </.form>
+
+              <%= if @selected_role_id do %>
+                <.form for={@role_edit_form} id="role-edit-form" phx-submit="update_role" class="mt-6">
+                  <.input field={@role_edit_form[:id]} type="hidden" />
+                  <.input field={@role_edit_form[:role_name]} type="text" label="Role name" required />
+                  <.input field={@role_edit_form[:description]} type="text" label="Description" />
+                  <.input
+                    field={@role_edit_form[:permissions]}
+                    type="textarea"
+                    label="Permissions JSON"
+                    rows="10"
+                    required
+                  />
+
+                  <p :if={@edit_error} class="mt-3 text-sm font-semibold text-rose-600">
+                    {@edit_error}
+                  </p>
+
+                  <button
+                    type="submit"
+                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                  >
+                    Save updates
+                  </button>
+                </.form>
+              <% else %>
+                <p class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Choose a role above to update its permissions and description.
+                </p>
+              <% end %>
+            </section>
+
             <section class="rounded-3xl border border-indigo-100 bg-indigo-50/70 p-6">
               <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">
                 Permission format
@@ -183,6 +240,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
        |> assign(:roles_form, build_role_form())
        |> assign(:roles_error, nil)
        |> assign(:roles_count, length(roles))
+       |> assign(:role_options, role_options(roles))
        |> stream(:roles, roles, reset: true)
        |> put_flash(:info, "Role created successfully.")}
     else
@@ -200,11 +258,62 @@ defmodule RbacAppWeb.Admin.RolesLive do
       {:noreply,
        socket
        |> assign(:roles_count, length(roles))
+       |> assign(:role_options, role_options(roles))
+       |> assign(:role_select_form, build_role_select_form())
+       |> assign(:role_edit_form, build_role_edit_form())
+       |> assign(:selected_role_id, nil)
        |> stream(:roles, roles, reset: true)
        |> put_flash(:info, "Role removed.")}
     else
       {:error, error_message} ->
         {:noreply, put_flash(socket, :error, error_message)}
+    end
+  end
+
+  def handle_event("load_role", %{"role_select" => %{"role_id" => role_id}}, socket) do
+    actor = socket.assigns[:current_user]
+
+    case load_role_for_edit(role_id, actor) do
+      {:ok, role} ->
+        {:noreply,
+         socket
+         |> assign(:selected_role_id, role.id)
+         |> assign(:role_edit_form, build_role_edit_form(role))
+         |> assign(:role_select_form, build_role_select_form(role.id))
+         |> assign(:edit_error, nil)}
+
+      {:error, error_message} ->
+        {:noreply,
+         socket
+         |> assign(:selected_role_id, nil)
+         |> assign(:role_edit_form, build_role_edit_form())
+         |> assign(:role_select_form, build_role_select_form())
+         |> assign(:edit_error, error_message)}
+    end
+  end
+
+  def handle_event("update_role", %{"role_edit" => params}, socket) do
+    actor = socket.assigns[:current_user]
+    role_id = Map.get(params, "id")
+
+    with {:ok, role} <- load_role_for_edit(role_id, actor),
+         {:ok, attrs} <- build_role_attrs(params),
+         {:ok, _role} <- update_role(role, attrs, actor),
+         {:ok, edited_role} <- load_role_for_edit(role_id, actor) do
+      roles = list_roles(actor)
+
+      {:noreply,
+       socket
+       |> assign(:role_edit_form, build_role_edit_form(edited_role))
+       |> assign(:role_select_form, build_role_select_form(role_id))
+       |> assign(:edit_error, nil)
+       |> assign(:roles_count, length(roles))
+       |> assign(:role_options, role_options(roles))
+       |> stream(:roles, roles, reset: true)
+       |> put_flash(:info, "Role updated successfully.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :edit_error, error_message)}
     end
   end
 
@@ -217,8 +326,41 @@ defmodule RbacAppWeb.Admin.RolesLive do
     to_form(Map.merge(defaults, params), as: :role)
   end
 
+  defp build_role_select_form(role_id \\ "") do
+    to_form(%{"role_id" => role_id}, as: :role_select)
+  end
+
+  defp build_role_edit_form(role \\ nil) do
+    defaults = %{
+      "id" => "",
+      "role_name" => "",
+      "description" => "",
+      "permissions" => String.trim(@default_permissions)
+    }
+
+    form_values =
+      case role do
+        nil ->
+          defaults
+
+        _ ->
+          Map.merge(defaults, %{
+            "id" => role.id,
+            "role_name" => role.role_name,
+            "description" => role.description || "",
+            "permissions" => Jason.encode!(role.permissions)
+          })
+      end
+
+    to_form(form_values, as: :role_edit)
+  end
+
   defp list_roles(actor) do
     Ash.read!(Role, domain: RbacApp.RBAC, actor: actor)
+  end
+
+  defp role_options(roles) do
+    Enum.map(roles, &{&1.role_name, &1.id})
   end
 
   defp build_role_attrs(params) do
@@ -256,6 +398,22 @@ defmodule RbacAppWeb.Admin.RolesLive do
     end
   end
 
+  defp load_role_for_edit("", _actor), do: {:error, "Select a role to edit."}
+  defp load_role_for_edit(nil, _actor), do: {:error, "Select a role to edit."}
+
+  defp load_role_for_edit(role_id, actor) do
+    role =
+      Role
+      |> Ash.Query.filter(id == ^role_id)
+      |> Ash.read_one(domain: RbacApp.RBAC, actor: actor)
+
+    case role do
+      {:ok, nil} -> {:error, "Selected role could not be found."}
+      {:ok, role} -> {:ok, role}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
   defp delete_role(id, actor) do
     role =
       Role
@@ -273,4 +431,13 @@ defmodule RbacAppWeb.Admin.RolesLive do
 
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
+
+  defp update_role(role, attrs, actor) do
+    changeset = Ash.Changeset.for_update(role, :edit, attrs)
+
+    case Ash.update(changeset, actor: actor, domain: RbacApp.RBAC) do
+      {:ok, updated_role} -> {:ok, updated_role}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
 end
