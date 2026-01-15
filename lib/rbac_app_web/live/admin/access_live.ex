@@ -507,7 +507,7 @@ defmodule RbacAppWeb.Admin.AccessLive do
     {Enum.slice(records, start_index, page_size), total_pages}
   end
 
-  defp clamp_page(page, total_pages) when page < 1, do: 1
+  defp clamp_page(page, _total_pages) when page < 1, do: 1
   defp clamp_page(page, total_pages) when page > total_pages, do: total_pages
   defp clamp_page(page, _total_pages), do: page
 

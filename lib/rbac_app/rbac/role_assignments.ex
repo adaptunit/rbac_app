@@ -27,17 +27,9 @@ defmodule RbacApp.RBAC.RoleAssignments do
         existing_links
         |> Enum.filter(fn link -> not MapSet.member?(desired_set, link.role_id) end)
 
-      multi =
-        Ash.Multi.new()
-        |> add_creates(user_id, to_add)
-        |> add_destroys(to_remove)
-
-      case Ash.Multi.run(multi, domain: RbacApp.RBAC, actor: actor) do
-        {:ok, _result} ->
-          {:ok, %{added: length(to_add), removed: length(to_remove)}}
-
-        {:error, error} ->
-          {:error, error}
+      with :ok <- create_links(user_id, to_add, actor),
+           :ok <- destroy_links(to_remove, actor) do
+        {:ok, %{added: length(to_add), removed: length(to_remove)}}
       end
     end
   end
@@ -48,25 +40,30 @@ defmodule RbacApp.RBAC.RoleAssignments do
     |> Ash.read(domain: RbacApp.RBAC, actor: actor)
   end
 
-  defp add_creates(multi, _user_id, []), do: multi
+  defp create_links(_user_id, [], _actor), do: :ok
 
-  defp add_creates(multi, user_id, role_ids) do
-    Enum.reduce(Enum.with_index(role_ids), multi, fn {role_id, idx}, acc ->
-      Ash.Multi.create(
-        acc,
-        {:assign_role, idx},
-        UserRole,
-        :assign,
-        %{user_id: user_id, role_id: role_id}
-      )
+  defp create_links(user_id, role_ids, actor) do
+    Enum.reduce_while(role_ids, :ok, fn role_id, :ok ->
+      changeset =
+        UserRole
+        |> Ash.Changeset.for_create(:assign, %{user_id: user_id, role_id: role_id})
+
+      case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC) do
+        {:ok, _record} -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
     end)
   end
 
-  defp add_destroys(multi, []), do: multi
+  defp destroy_links([], _actor), do: :ok
 
-  defp add_destroys(multi, links) do
-    Enum.reduce(Enum.with_index(links), multi, fn {link, idx}, acc ->
-      Ash.Multi.destroy(acc, {:remove_role, idx}, link, domain: RbacApp.RBAC)
+  defp destroy_links(links, actor) do
+    Enum.reduce_while(links, :ok, fn link, :ok ->
+      case Ash.destroy(link, actor: actor, domain: RbacApp.RBAC) do
+        :ok -> {:cont, :ok}
+        {:ok, _record} -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
     end)
   end
 
