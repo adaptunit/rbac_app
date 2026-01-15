@@ -21,7 +21,7 @@ defmodule RbacApp.Auth.Checks.HasPermission do
 
     perms =
       actor
-      |> role_permissions()
+      |> combined_permissions()
       |> MapSet.new()
 
     MapSet.member?(perms, "*") or
@@ -29,21 +29,39 @@ defmodule RbacApp.Auth.Checks.HasPermission do
       wildcard_match?(perms, required)
   end
 
+  defp combined_permissions(actor) do
+    role_permissions(actor) ++ user_permissions(actor)
+  end
+
   defp role_permissions(actor) do
     roles = Map.get(actor, :roles, [])
 
     Enum.flat_map(roles, fn role ->
-      permissions = role.permissions || %{}
+      role.permissions
+      |> permissions_from_map()
+    end)
+  end
 
-      Enum.flat_map(permissions, fn
-        {resource, actions} when is_list(actions) ->
-          Enum.map(actions, fn action ->
-            normalize("#{resource}.#{action}")
-          end)
+  defp user_permissions(actor) do
+    actor
+    |> Map.get(:permissions, %{})
+    |> permissions_from_map()
+  end
 
-        {_resource, _} ->
-          []
-      end)
+  defp permissions_from_map(nil), do: []
+
+  defp permissions_from_map(permissions) when is_map(permissions) do
+    Enum.flat_map(permissions, fn
+      {resource, actions} when is_list(actions) ->
+        Enum.map(actions, fn action ->
+          normalize("#{resource}.#{action}")
+        end)
+
+      {resource, "*"} ->
+        [normalize("#{resource}.*")]
+
+      {_resource, _} ->
+        []
     end)
   end
 
