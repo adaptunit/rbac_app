@@ -61,6 +61,7 @@ defmodule RbacApp.MixProject do
       # Auth
       {:ash_authentication, "~> 4.13"},
       {:ash_authentication_phoenix, "~> 2.14"},
+      {:ash_authentication_password, "~> 3.0"},
       {:bcrypt_elixir, "~> 3.3"},
 
       # Jobs (optional now, but requested)
