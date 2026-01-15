@@ -41,61 +41,76 @@ defmodule RbacAppWeb.Admin.UsersLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="space-y-8">
-        <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-500">
-              User directory
-            </p>
-            <h1 class="mt-2 text-3xl font-semibold text-slate-900">
-              Create users, capture identity details, and assign roles.
-            </h1>
-            <p :if={@load_error} class="mt-3 text-sm font-semibold text-rose-600">
-              {@load_error}
-            </p>
+      <div class="space-y-10">
+        <header class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.35em] text-indigo-500">
+                User directory
+              </p>
+              <h1 class="mt-2 text-3xl font-semibold text-slate-900">
+                Create users, capture identity details, and assign roles.
+              </h1>
+              <p class="mt-2 text-sm text-slate-600">
+                Manage onboarding, profile maintenance, and resource access from a unified control panel.
+              </p>
+              <p :if={@load_error} class="mt-3 text-sm font-semibold text-rose-600">
+                {@load_error}
+              </p>
+            </div>
+            <nav class="w-full lg:w-auto">
+              <ul class="menu menu-horizontal w-full rounded-full bg-slate-50 p-1 text-sm font-semibold lg:w-auto">
+                <li>
+                  <.link
+                    navigate={~p"/admin"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :dashboard && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :dashboard && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Overview
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    navigate={~p"/admin/users"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :users && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :users && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Users
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    navigate={~p"/admin/roles"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :roles && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :roles && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Roles
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    navigate={~p"/admin/access"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :access && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :access && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Access UI
+                  </.link>
+                </li>
+              </ul>
+            </nav>
           </div>
-          <nav class="flex flex-wrap gap-3 text-sm font-semibold">
-            <.link
-              navigate={~p"/admin"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :dashboard && "bg-indigo-500 text-white shadow",
-                @page != :dashboard && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Overview
-            </.link>
-            <.link
-              navigate={~p"/admin/users"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :users && "bg-indigo-500 text-white shadow",
-                @page != :users && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Users
-            </.link>
-            <.link
-              navigate={~p"/admin/roles"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :roles && "bg-indigo-500 text-white shadow",
-                @page != :roles && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Roles
-            </.link>
-            <.link
-              navigate={~p"/admin/access"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :access && "bg-indigo-500 text-white shadow",
-                @page != :access && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Access UI
-            </.link>
-          </nav>
         </header>
 
         <div class="grid gap-6 xl:grid-cols-[2fr_1fr]">
@@ -156,83 +171,104 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
           <aside class="space-y-6">
             <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 class="text-lg font-semibold text-slate-900">Create user</h2>
-              <p class="mt-2 text-sm text-slate-600">
-                Register a new account and capture identity details in one flow.
-              </p>
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 class="text-lg font-semibold text-slate-900">Create user</h2>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Register a new account and capture identity details in one flow.
+                  </p>
+                </div>
+                <span class="badge badge-outline border-indigo-200 text-indigo-600">New account</span>
+              </div>
 
-              <.form for={@user_form} id="user-create-form" phx-submit="create_user" class="mt-4 space-y-6">
+              <.form for={@user_form} id="user-create-form" phx-submit="create_user" class="mt-6 space-y-6">
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Account credentials
                   </h3>
-                  <.input field={@user_form[:email]} type="email" label="Work email" required />
-                  <.input field={@user_form[:password]} type="password" label="Temporary password" required />
-                  <.input field={@user_form[:is_active]} type="checkbox" label="Activate immediately" />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <.input field={@user_form[:email]} type="email" label="Work email" required />
+                    <.input field={@user_form[:password]} type="password" label="Temporary password" required />
+                    <div class="sm:col-span-2">
+                      <.input field={@user_form[:is_active]} type="checkbox" label="Activate immediately" />
+                    </div>
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Identity details
                   </h3>
-                  <.input field={@user_form[:first_name]} type="text" label="First name" required />
-                  <.input field={@user_form[:middle_name]} type="text" label="Middle name" />
-                  <.input field={@user_form[:last_name]} type="text" label="Last name" required />
-                  <.input field={@user_form[:gender]} type="text" label="Gender" />
-                  <.input field={@user_form[:birthdate]} type="date" label="Birthdate" />
-                  <.input field={@user_form[:nationality]} type="text" label="Nationality" />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <.input field={@user_form[:first_name]} type="text" label="First name" required />
+                    <.input field={@user_form[:middle_name]} type="text" label="Middle name" />
+                    <.input field={@user_form[:last_name]} type="text" label="Last name" required />
+                    <.input field={@user_form[:gender]} type="text" label="Gender" />
+                    <.input field={@user_form[:birthdate]} type="date" label="Birthdate" />
+                    <.input field={@user_form[:nationality]} type="text" label="Nationality" />
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Contact & address
                   </h3>
-                  <.input field={@user_form[:phone]} type="tel" label="Primary phone" />
-                  <.input field={@user_form[:phone_alt]} type="tel" label="Secondary phone" />
-                  <.input field={@user_form[:email_alt]} type="email" label="Secondary email" />
-                  <.input field={@user_form[:address_line1]} type="text" label="Address line 1" />
-                  <.input field={@user_form[:address_line2]} type="text" label="Address line 2" />
-                  <.input field={@user_form[:city]} type="text" label="City" />
-                  <.input field={@user_form[:region]} type="text" label="Region/State" />
-                  <.input field={@user_form[:postal_code]} type="text" label="Postal code" />
-                  <.input field={@user_form[:country]} type="text" label="Country" />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <.input field={@user_form[:phone]} type="tel" label="Primary phone" />
+                    <.input field={@user_form[:phone_alt]} type="tel" label="Secondary phone" />
+                    <.input field={@user_form[:email_alt]} type="email" label="Secondary email" />
+                    <.input field={@user_form[:address_line1]} type="text" label="Address line 1" />
+                    <.input field={@user_form[:address_line2]} type="text" label="Address line 2" />
+                    <.input field={@user_form[:city]} type="text" label="City" />
+                    <.input field={@user_form[:region]} type="text" label="Region/State" />
+                    <.input field={@user_form[:postal_code]} type="text" label="Postal code" />
+                    <.input field={@user_form[:country]} type="text" label="Country" />
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Extended profile
                   </h3>
-                  <.input
-                    field={@user_form[:emergency_contact]}
-                    type="textarea"
-                    label="Emergency contact (JSON)"
-                    rows="4"
-                  />
-                  <.input
-                    field={@user_form[:children]}
-                    type="textarea"
-                    label="Children (JSON array)"
-                    rows="4"
-                  />
-                  <.input field={@user_form[:notes]} type="textarea" label="Notes" rows="3" />
-                  <.input field={@user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                  <div class="grid gap-4">
+                    <.input
+                      field={@user_form[:emergency_contact]}
+                      type="textarea"
+                      label="Emergency contact (JSON)"
+                      rows="4"
+                    />
+                    <.input
+                      field={@user_form[:children]}
+                      type="textarea"
+                      label="Children (JSON array)"
+                      rows="4"
+                    />
+                    <.input field={@user_form[:notes]} type="textarea" label="Notes" rows="3" />
+                    <.input field={@user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Access scope
                   </h3>
-                  <.input field={@user_form[:role_ids]} type="select" label="Initial roles" options={@role_options} multiple />
+                  <.input
+                    field={@user_form[:role_ids]}
+                    type="select"
+                    label="Initial roles"
+                    options={@role_options}
+                    multiple
+                  />
+                  <p class="text-xs text-slate-500">
+                    Assign one or more roles to seed the user's access levels on creation.
+                  </p>
                 </div>
 
                 <p :if={@form_error} class="mt-3 text-sm font-semibold text-rose-600">
                   {@form_error}
                 </p>
 
-                <button
-                  type="submit"
-                  class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
-                >
+                <button type="submit" class="btn btn-primary w-full">
                   Create user
                 </button>
               </.form>
@@ -247,8 +283,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
               <.form
                 for={@edit_user_select_form}
                 id="user-edit-select-form"
+                phx-submit="load_user"
                 phx-change="load_user"
-                class="mt-4"
+                class="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
               >
                 <.input
                   field={@edit_user_select_form[:user_id]}
@@ -257,6 +294,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
                   options={@user_options}
                   prompt="Choose a user"
                 />
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Load profile
+                </button>
               </.form>
 
               <%= if @selected_user_id do %>
@@ -266,65 +306,72 @@ defmodule RbacAppWeb.Admin.UsersLive do
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Account credentials
                     </h3>
-                    <.input field={@edit_user_form[:email]} type="email" label="Work email" required />
-                    <.input field={@edit_user_form[:is_active]} type="checkbox" label="Account active" />
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <.input field={@edit_user_form[:email]} type="email" label="Work email" required />
+                      <div class="sm:col-span-2">
+                        <.input field={@edit_user_form[:is_active]} type="checkbox" label="Account active" />
+                      </div>
+                    </div>
                   </div>
 
                   <div class="space-y-4">
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Identity details
                     </h3>
-                    <.input field={@edit_user_form[:first_name]} type="text" label="First name" required />
-                    <.input field={@edit_user_form[:middle_name]} type="text" label="Middle name" />
-                    <.input field={@edit_user_form[:last_name]} type="text" label="Last name" required />
-                    <.input field={@edit_user_form[:gender]} type="text" label="Gender" />
-                    <.input field={@edit_user_form[:birthdate]} type="date" label="Birthdate" />
-                    <.input field={@edit_user_form[:nationality]} type="text" label="Nationality" />
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <.input field={@edit_user_form[:first_name]} type="text" label="First name" required />
+                      <.input field={@edit_user_form[:middle_name]} type="text" label="Middle name" />
+                      <.input field={@edit_user_form[:last_name]} type="text" label="Last name" required />
+                      <.input field={@edit_user_form[:gender]} type="text" label="Gender" />
+                      <.input field={@edit_user_form[:birthdate]} type="date" label="Birthdate" />
+                      <.input field={@edit_user_form[:nationality]} type="text" label="Nationality" />
+                    </div>
                   </div>
 
                   <div class="space-y-4">
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Contact & address
                     </h3>
-                    <.input field={@edit_user_form[:phone]} type="tel" label="Primary phone" />
-                    <.input field={@edit_user_form[:phone_alt]} type="tel" label="Secondary phone" />
-                    <.input field={@edit_user_form[:email_alt]} type="email" label="Secondary email" />
-                    <.input field={@edit_user_form[:address_line1]} type="text" label="Address line 1" />
-                    <.input field={@edit_user_form[:address_line2]} type="text" label="Address line 2" />
-                    <.input field={@edit_user_form[:city]} type="text" label="City" />
-                    <.input field={@edit_user_form[:region]} type="text" label="Region/State" />
-                    <.input field={@edit_user_form[:postal_code]} type="text" label="Postal code" />
-                    <.input field={@edit_user_form[:country]} type="text" label="Country" />
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <.input field={@edit_user_form[:phone]} type="tel" label="Primary phone" />
+                      <.input field={@edit_user_form[:phone_alt]} type="tel" label="Secondary phone" />
+                      <.input field={@edit_user_form[:email_alt]} type="email" label="Secondary email" />
+                      <.input field={@edit_user_form[:address_line1]} type="text" label="Address line 1" />
+                      <.input field={@edit_user_form[:address_line2]} type="text" label="Address line 2" />
+                      <.input field={@edit_user_form[:city]} type="text" label="City" />
+                      <.input field={@edit_user_form[:region]} type="text" label="Region/State" />
+                      <.input field={@edit_user_form[:postal_code]} type="text" label="Postal code" />
+                      <.input field={@edit_user_form[:country]} type="text" label="Country" />
+                    </div>
                   </div>
 
                   <div class="space-y-4">
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Extended profile
                     </h3>
-                    <.input
-                      field={@edit_user_form[:emergency_contact]}
-                      type="textarea"
-                      label="Emergency contact (JSON)"
-                      rows="4"
-                    />
-                    <.input
-                      field={@edit_user_form[:children]}
-                      type="textarea"
-                      label="Children (JSON array)"
-                      rows="4"
-                    />
-                    <.input field={@edit_user_form[:notes]} type="textarea" label="Notes" rows="3" />
-                    <.input field={@edit_user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                    <div class="grid gap-4">
+                      <.input
+                        field={@edit_user_form[:emergency_contact]}
+                        type="textarea"
+                        label="Emergency contact (JSON)"
+                        rows="4"
+                      />
+                      <.input
+                        field={@edit_user_form[:children]}
+                        type="textarea"
+                        label="Children (JSON array)"
+                        rows="4"
+                      />
+                      <.input field={@edit_user_form[:notes]} type="textarea" label="Notes" rows="3" />
+                      <.input field={@edit_user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                    </div>
                   </div>
 
                   <p :if={@edit_error} class="mt-3 text-sm font-semibold text-rose-600">
                     {@edit_error}
                   </p>
 
-                  <button
-                    type="submit"
-                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
-                  >
+                  <button type="submit" class="btn btn-outline w-full">
                     Save updates
                   </button>
                 </.form>
@@ -344,7 +391,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
                 for={@assignment_form}
                 id="role-assignment-form"
                 phx-submit="assign_roles"
-                class="mt-4"
+                class="mt-4 space-y-4"
               >
                 <.input
                   field={@assignment_form[:user_id]}
@@ -366,10 +413,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
                   {@assignment_error}
                 </p>
 
-                <button
-                  type="submit"
-                  class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
-                >
+                <button type="submit" class="btn btn-outline w-full">
                   Save assignments
                 </button>
               </.form>
@@ -384,8 +428,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
               <.form
                 for={@permission_select_form}
                 id="user-permission-select-form"
+                phx-submit="load_permission_user"
                 phx-change="load_permission_user"
-                class="mt-4"
+                class="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
               >
                 <.input
                   field={@permission_select_form[:user_id]}
@@ -394,6 +439,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
                   options={@user_options}
                   prompt="Choose a user"
                 />
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Load access
+                </button>
               </.form>
 
               <%= if @permission_user do %>
@@ -406,31 +454,33 @@ defmodule RbacAppWeb.Admin.UsersLive do
                       {length(permission_entries(@permission_user))} entries
                     </span>
                   </div>
-                  <div class="mt-3 space-y-3">
+                  <ul class="list mt-3">
                     <%= for {resource, actions} <- permission_entries(@permission_user) do %>
-                      <div class="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                        <div>
+                      <li class="list-row bg-white">
+                        <div class="list-col-grow">
                           <p class="text-sm font-semibold text-slate-900">{resource}</p>
                           <p class="text-xs text-slate-500">{format_actions(actions)}</p>
                         </div>
-                        <button
-                          type="button"
-                          phx-click="remove_user_permission"
-                          phx-value-user-id={@permission_user.id}
-                          phx-value-resource={resource}
-                          class="text-xs font-semibold text-rose-600 transition hover:text-rose-500"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                        <div class="list-col-wrap flex items-center justify-end">
+                          <button
+                            type="button"
+                            phx-click="remove_user_permission"
+                            phx-value-user-id={@permission_user.id}
+                            phx-value-resource={resource}
+                            class="btn btn-ghost btn-xs text-rose-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </li>
                     <% end %>
-                    <p
-                      :if={permission_entries(@permission_user) == []}
-                      class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
-                    >
-                      No direct permissions yet. Add a route below.
-                    </p>
-                  </div>
+                  </ul>
+                  <p
+                    :if={permission_entries(@permission_user) == []}
+                    class="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
+                  >
+                    No direct permissions yet. Add a route below.
+                  </p>
                 </div>
 
                 <.form
@@ -460,10 +510,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
                     {@permission_error}
                   </p>
 
-                  <button
-                    type="submit"
-                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
-                  >
+                  <button type="submit" class="btn btn-outline w-full">
                     Save permission
                   </button>
                 </.form>
