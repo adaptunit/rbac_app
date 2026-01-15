@@ -51,6 +51,10 @@ defmodule RbacApp.Accounts.User do
       change(AshAuthentication.Strategy.Password.HashPassword)
     end
 
+    create :seed do
+      accept([:email, :hashed_password, :is_active])
+    end
+
     update :edit do
       accept([:email, :is_active])
     end
