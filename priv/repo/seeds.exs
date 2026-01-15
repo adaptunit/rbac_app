@@ -84,21 +84,45 @@ defmodule RbacApp.Seeds do
     |> Ash.read_one(domain: RbacApp.Accounts, authorize?: false)
     |> case do
       {:ok, nil} ->
-        changeset =
-          Ash.Changeset.for_create(
-            User,
-            :create,
-            %{email: email, is_active: true},
-            arguments: %{password: password}
-          )
-
-        Ash.create!(changeset, domain: RbacApp.Accounts, authorize?: false)
+        create_user(email, password)
 
       {:ok, user} ->
         user
 
       {:error, error} ->
         raise error
+    end
+  end
+
+  defp create_user(email, password) do
+    if Code.ensure_loaded?(AshAuthentication.Strategy.Password.HashPassword) do
+      changeset =
+        Ash.Changeset.for_create(
+          User,
+          :create,
+          %{email: email, is_active: true},
+          arguments: %{password: password}
+        )
+
+      Ash.create!(changeset, domain: RbacApp.Accounts, authorize?: false)
+    else
+      IO.warn("""
+      AshAuthentication.Strategy.Password.HashPassword is unavailable.
+      Creating seed users with a fallback hash; authentication will not work until dependencies are installed.
+      """)
+
+      hashed_password =
+        :crypto.hash(:sha256, password)
+        |> Base.encode16(case: :lower)
+
+      changeset =
+        Ash.Changeset.for_create(
+          User,
+          :seed,
+          %{email: email, is_active: true, hashed_password: hashed_password}
+        )
+
+      Ash.create!(changeset, domain: RbacApp.Accounts, authorize?: false)
     end
   end
 
