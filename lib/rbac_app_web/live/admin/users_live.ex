@@ -3,7 +3,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   require Ash.Query
 
-  alias RbacApp.Accounts.{Person, User, UserProvisioning}
+  alias RbacApp.Accounts.{Person, User}
   alias RbacApp.RBAC.{Role, RoleAssignments}
 
   def mount(_params, _session, socket) do
@@ -1014,6 +1014,26 @@ defmodule RbacAppWeb.Admin.UsersLive do
          metadata: metadata
        }}
     end
+  end
+
+  defp create_user(attrs, actor) do
+    {password, user_attrs} = Map.pop(attrs, :password)
+
+    changeset =
+      User
+      |> Ash.Changeset.for_create(:create, user_attrs)
+      |> maybe_set_password_argument(password)
+
+    case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
+      {:ok, user} -> {:ok, user}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
+  defp maybe_set_password_argument(changeset, nil), do: changeset
+
+  defp maybe_set_password_argument(changeset, password) do
+    Ash.Changeset.set_argument(changeset, :password, password)
   end
 
   defp create_person(user, attrs, actor) do
