@@ -3,7 +3,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   require Ash.Query
 
-  alias RbacApp.Accounts.{Person, User}
+  alias RbacApp.Accounts.{Person, User, UserProvisioning}
   alias RbacApp.RBAC.{Role, RoleAssignments}
 
   def mount(_params, _session, socket) do
@@ -611,8 +611,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
     with {:ok, user} <- load_user_for_edit(user_id, actor),
          {:ok, user_attrs} <- build_user_edit_attrs(params),
          {:ok, person_attrs} <- build_person_attrs(params),
-         {:ok, _user} <- update_user(user, user_attrs, actor),
-         {:ok, _person} <- upsert_person(user, person_attrs, actor),
+         {:ok, _} <- UserProvisioning.update_user_profile(user, user_attrs, person_attrs, actor),
          {:ok, edited_user} <- load_user_for_edit(user_id, actor) do
       users = list_users(actor)
 
@@ -1045,28 +1044,6 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
     case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
       {:ok, person} -> {:ok, person}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
-  end
-
-  defp update_user(user, attrs, actor) do
-    changeset = Ash.Changeset.for_update(user, :edit, attrs)
-
-    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, updated_user} -> {:ok, updated_user}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
-  end
-
-  defp upsert_person(%User{person: nil} = user, attrs, actor) do
-    create_person(user, attrs, actor)
-  end
-
-  defp upsert_person(%User{person: person}, attrs, actor) do
-    changeset = Ash.Changeset.for_update(person, :edit, attrs)
-
-    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, updated_person} -> {:ok, updated_person}
       {:error, error} -> {:error, Exception.message(error)}
     end
   end
