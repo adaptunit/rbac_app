@@ -17,11 +17,16 @@ defmodule RbacApp.Auth.Checks.HasPermission do
   def match?(nil, _context, _opts), do: false
 
   def match?(actor, _context, opts) do
-    required = to_string(Keyword.fetch!(opts, :permission))
+    required =
+      opts
+      |> Keyword.fetch!(:permission)
+      |> to_string()
+      |> normalize()
 
     perms =
       actor
       |> combined_permissions()
+      |> Enum.map(&normalize/1)
       |> MapSet.new()
 
     MapSet.member?(perms, "*") or
@@ -66,15 +71,38 @@ defmodule RbacApp.Auth.Checks.HasPermission do
   end
 
   defp wildcard_match?(perms, required) do
-    required = normalize(required)
+    case parse_permission(required) do
+      {:ok, resource, _action} ->
+        namespace = namespace_for(resource)
 
-    case String.split(required, ".", parts: 2) do
-      [resource, _action] ->
-        MapSet.member?(perms, "#{resource}.*") or MapSet.member?(perms, "#{resource}:*")
+        MapSet.member?(perms, "#{resource}.*") or
+          MapSet.member?(perms, "#{namespace}.*")
 
-      _ ->
+      :error ->
         false
     end
+  end
+
+  defp parse_permission("*"), do: :error
+
+  defp parse_permission(str) when is_binary(str) do
+    parts = String.split(str, ".", trim: true)
+
+    case parts do
+      [_single] ->
+        :error
+
+      _ ->
+        action = List.last(parts)
+        resource = parts |> Enum.drop(-1) |> Enum.join(".")
+        {:ok, resource, action}
+    end
+  end
+
+  defp namespace_for(resource) do
+    resource
+    |> String.split(".", parts: 2)
+    |> hd()
   end
 
   defp normalize(str), do: String.replace(str, ":*", ".*")

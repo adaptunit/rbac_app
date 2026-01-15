@@ -4,7 +4,7 @@ defmodule RbacAppWeb.Api.UsersController do
   require Ash.Query
 
   alias RbacApp.Accounts.{Person, User}
-  alias RbacApp.RBAC.UserRole
+  alias RbacApp.RBAC.RoleAssignments
 
   def index(conn, _params) do
     actor = conn.assigns[:current_user]
@@ -47,7 +47,7 @@ defmodule RbacAppWeb.Api.UsersController do
     with {:ok, user_attrs} <- build_user_attrs(user_params),
          {:ok, user} <- create_user(user_attrs, actor),
          {:ok, _person} <- maybe_create_person(user, person_params, actor),
-         {:ok, _roles} <- assign_roles(user.id, role_ids, actor),
+         {:ok, _} <- RoleAssignments.sync_user_roles(user.id, role_ids, actor),
          {:ok, loaded_user} <- load_user(user.id, actor) do
       conn
       |> put_status(:created)
@@ -145,7 +145,7 @@ defmodule RbacAppWeb.Api.UsersController do
     role_ids = Map.get(params, "role_ids")
 
     with {:ok, _user} <- load_user(user_id, actor),
-         {:ok, _} <- assign_roles(user_id, role_ids, actor),
+         {:ok, _} <- RoleAssignments.sync_user_roles(user_id, role_ids, actor),
          {:ok, loaded_user} <- load_user(user_id, actor) do
       json(conn, %{data: user_payload(loaded_user)})
     else
@@ -339,64 +339,6 @@ defmodule RbacAppWeb.Api.UsersController do
       end
     end
   end
-
-  defp assign_roles(user_id, role_ids, actor) do
-    role_ids = normalize_role_ids(role_ids)
-
-    with {:ok, existing_roles} <-
-           UserRole
-           |> Ash.Query.filter(user_id == ^user_id)
-           |> Ash.read(domain: RbacApp.RBAC, actor: actor),
-         {:ok, _} <- create_role_links(user_id, existing_roles, role_ids, actor),
-         {:ok, _} <- remove_role_links(existing_roles, role_ids, actor) do
-      {:ok, :updated}
-    end
-  end
-
-  defp create_role_links(_user_id, _existing_roles, [], _actor), do: {:ok, :skipped}
-
-  defp create_role_links(user_id, existing_roles, role_ids, actor) do
-    existing_role_ids = Enum.map(existing_roles, & &1.role_id)
-    to_add = role_ids -- existing_role_ids
-
-    to_add
-    |> Enum.reduce_while({:ok, :created}, fn role_id, _acc ->
-      changeset = Ash.Changeset.for_create(UserRole, :assign, %{user_id: user_id, role_id: role_id})
-
-      case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC) do
-        {:ok, _} -> {:cont, {:ok, :created}}
-        {:error, error} -> {:halt, {:error, error}}
-      end
-    end)
-    |> handle_resource_action()
-  end
-
-  defp remove_role_links(_existing_roles, [], _actor), do: {:ok, :skipped}
-
-  defp remove_role_links(existing_roles, role_ids, actor) do
-    existing_role_ids = Enum.map(existing_roles, & &1.role_id)
-    to_remove = existing_role_ids -- role_ids
-
-    to_remove
-    |> Enum.reduce_while({:ok, :removed}, fn role_id, _acc ->
-      case Enum.find(existing_roles, &(&1.role_id == role_id)) do
-        nil ->
-          {:cont, {:ok, :removed}}
-
-        user_role ->
-          case Ash.destroy(user_role, actor: actor, domain: RbacApp.RBAC) do
-            :ok -> {:cont, {:ok, :removed}}
-            {:error, error} -> {:halt, {:error, error}}
-          end
-      end
-    end)
-    |> handle_resource_action()
-  end
-
-  defp normalize_role_ids(nil), do: []
-  defp normalize_role_ids(""), do: []
-  defp normalize_role_ids(role_ids) when is_list(role_ids), do: Enum.reject(role_ids, &(&1 == ""))
-  defp normalize_role_ids(role_id), do: [role_id]
 
   defp handle_resource_action({:ok, result}), do: {:ok, result}
   defp handle_resource_action(:ok), do: {:ok, :ok}
