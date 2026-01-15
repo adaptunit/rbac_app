@@ -388,7 +388,7 @@ defmodule RbacAppWeb.Api.UsersController do
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
 
-  defp normalize_boolean(value, default) when is_boolean(value), do: value
+  defp normalize_boolean(value, _default) when is_boolean(value), do: value
   defp normalize_boolean("true", _default), do: true
   defp normalize_boolean("false", _default), do: false
   defp normalize_boolean(nil, default), do: default
