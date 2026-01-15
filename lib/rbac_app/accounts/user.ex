@@ -22,6 +22,7 @@ defmodule RbacApp.Accounts.User do
     attribute(:hashed_password, :string, allow_nil?: false, sensitive?: true, public?: false)
 
     attribute(:is_active, :boolean, allow_nil?: false, default: true)
+    attribute(:permissions, :map, allow_nil?: false, default: %{})
     create_timestamp(:inserted_at)
     update_timestamp(:updated_at)
   end
@@ -56,7 +57,7 @@ defmodule RbacApp.Accounts.User do
     end
 
     update :edit do
-      accept([:email, :is_active])
+      accept([:email, :is_active, :permissions])
     end
 
     read :get_by_subject do
