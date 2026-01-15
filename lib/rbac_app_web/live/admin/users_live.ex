@@ -1023,8 +1023,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
     changeset =
       User
-      |> Ash.Changeset.for_create(:create, user_attrs)
+      |> Ash.Changeset.new()
       |> maybe_set_password_argument(password)
+      |> Ash.Changeset.for_create(:create, user_attrs)
 
     case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
       {:ok, user} -> {:ok, user}
