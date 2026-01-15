@@ -529,12 +529,14 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   def handle_event("create_user", %{"user" => params}, socket) do
     actor = socket.assigns[:current_user]
+    role_ids = normalize_role_ids(Map.get(params, "role_ids"))
 
-    with {:ok, user_attrs} <- build_user_attrs(params),
+    with :ok <- validate_role_ids(role_ids),
+         {:ok, user_attrs} <- build_user_attrs(params),
          {:ok, person_attrs} <- build_person_attrs(params),
          {:ok, user} <- create_user(user_attrs, actor),
          {:ok, _person} <- create_person(user, person_attrs, actor),
-         {:ok, _} <- RoleAssignments.sync_user_roles(user.id, Map.get(params, "role_ids"), actor) do
+         {:ok, _} <- RoleAssignments.sync_user_roles(user.id, role_ids, actor) do
       users = list_users(actor)
 
       {:noreply,
@@ -847,6 +849,24 @@ defmodule RbacAppWeb.Admin.UsersLive do
       messages -> Enum.join(messages, " ")
     end
   end
+
+  defp normalize_role_ids(nil), do: []
+  defp normalize_role_ids(""), do: []
+
+  defp normalize_role_ids(role_ids) when is_list(role_ids) do
+    role_ids
+    |> Enum.map(&to_string/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp normalize_role_ids(role_id) do
+    normalize_role_ids([role_id])
+  end
+
+  defp validate_role_ids([]), do: {:error, "Select at least one role to seed access."}
+  defp validate_role_ids(_role_ids), do: :ok
 
   defp load_user_for_edit("", _actor), do: {:error, "Select a user to edit."}
   defp load_user_for_edit(nil, _actor), do: {:error, "Select a user to edit."}
