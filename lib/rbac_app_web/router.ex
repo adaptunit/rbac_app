@@ -25,6 +25,16 @@ defmodule RbacAppWeb.Router do
     plug(AshGraphql.Plug)
   end
 
+  scope "/api", RbacAppWeb.Api do
+    pipe_through(:api)
+
+    resources("/users", UsersController, except: [:new, :edit]) do
+      post("/roles", UsersController, :assign_roles)
+    end
+
+    resources("/roles", RolesController, except: [:new, :edit])
+  end
+
   scope "/", RbacAppWeb do
     pipe_through(:browser)
 
