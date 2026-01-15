@@ -25,37 +25,31 @@ defmodule RbacApp.Accounts.UserProvisioning do
     role_ids = normalize_role_ids(role_ids)
     person_attrs = normalize_person_attrs(person_attrs)
 
-    multi =
-      Ash.Multi.new()
-      |> Ash.Multi.create(:user, User, :create, user_attrs, domain: RbacApp.Accounts)
-      |> maybe_create_person(person_attrs)
-      |> add_role_assignments(role_ids)
+    result =
+      Ash.DataLayer.transaction(User, fn ->
+        with {:ok, user} <-
+               Ash.create(User, user_attrs,
+                 action: :create,
+                 actor: actor,
+                 domain: RbacApp.Accounts
+               ),
+             {:ok, _person} <- maybe_create_person(user, person_attrs, actor),
+             {:ok, _assignments} <- add_role_assignments(user, role_ids, actor),
+             {:ok, user} <- load_user(user.id, actor) do
+          user
+        else
+          {:error, error} -> Ash.DataLayer.rollback(User, error)
+        end
+      end)
 
-    case Ash.Multi.run(multi, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, %{user: user}} ->
-        load_user(user.id, actor)
-
-      {:error, %Ash.Error.Forbidden{}} ->
-        {:error, :forbidden}
-
-      {:error, step, %Ash.Error.Forbidden{}, _changes} ->
-        _ = step
-        {:error, :forbidden}
-
-      {:error, step, error, _changes} ->
-        _ = step
-        {:error, Exception.message(error)}
-
-      {:error, error} ->
-        {:error, Exception.message(error)}
-    end
+    handle_transaction_result(result)
   end
 
   @doc """
   Transactionally updates a user (if attributes provided) and upserts the user's person profile.
 
   This is meant to consolidate the LiveView/controller "update user + upsert person" multi-step flow
-  into a single Ash.Multi transaction.
+  into a single transaction.
   """
   @spec update_user_profile(User.t(), map(), person_attrs(), term()) ::
           {:ok, User.t()} | {:error, :forbidden | String.t()}
@@ -63,29 +57,18 @@ defmodule RbacApp.Accounts.UserProvisioning do
     user_attrs = normalize_user_update_attrs(user_attrs)
     person_attrs = normalize_person_attrs(person_attrs)
 
-    multi =
-      Ash.Multi.new()
-      |> maybe_update_user(user, user_attrs)
-      |> maybe_upsert_person(user, person_attrs)
+    result =
+      Ash.DataLayer.transaction(User, fn ->
+        with {:ok, user} <- maybe_update_user(user, user_attrs, actor),
+             {:ok, _person} <- maybe_upsert_person(user, person_attrs, actor),
+             {:ok, user} <- load_user(user.id, actor) do
+          user
+        else
+          {:error, error} -> Ash.DataLayer.rollback(User, error)
+        end
+      end)
 
-    case Ash.Multi.run(multi, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, _changes} ->
-        load_user(user.id, actor)
-
-      {:error, %Ash.Error.Forbidden{}} ->
-        {:error, :forbidden}
-
-      {:error, step, %Ash.Error.Forbidden{}, _changes} ->
-        _ = step
-        {:error, :forbidden}
-
-      {:error, step, error, _changes} ->
-        _ = step
-        {:error, Exception.message(error)}
-
-      {:error, error} ->
-        {:error, Exception.message(error)}
-    end
+    handle_transaction_result(result)
   end
 
   defp normalize_role_ids(nil), do: []
@@ -104,63 +87,50 @@ defmodule RbacApp.Accounts.UserProvisioning do
   defp normalize_user_update_attrs(%{} = attrs), do: attrs
   defp normalize_user_update_attrs(_), do: nil
 
-  defp maybe_create_person(multi, nil), do: multi
+  defp maybe_create_person(_user, nil, _actor), do: {:ok, nil}
 
-  defp maybe_create_person(multi, %{} = person_attrs) do
-    Ash.Multi.create(
-      multi,
-      :person,
-      Person,
-      :create,
-      fn %{user: user} ->
-        Map.put(person_attrs, :user_id, user.id)
-      end,
-      domain: RbacApp.Accounts
-    )
+  defp maybe_create_person(%User{} = user, %{} = person_attrs, actor) do
+    attrs = Map.put(person_attrs, :user_id, user.id)
+
+    Ash.create(Person, attrs, action: :create, actor: actor, domain: RbacApp.Accounts)
   end
 
-  defp maybe_update_user(multi, _user, nil), do: multi
+  defp maybe_update_user(%User{} = user, nil, _actor), do: {:ok, user}
 
-  defp maybe_update_user(multi, %User{} = user, %{} = user_attrs) do
+  defp maybe_update_user(%User{} = user, %{} = user_attrs, actor) do
     changeset = Ash.Changeset.for_update(user, :edit, user_attrs)
 
-    Ash.Multi.update(multi, :user, changeset, domain: RbacApp.Accounts)
+    Ash.update(changeset, actor: actor, domain: RbacApp.Accounts)
   end
 
-  defp maybe_upsert_person(multi, _user, nil), do: multi
+  defp maybe_upsert_person(_user, nil, _actor), do: {:ok, nil}
 
-  defp maybe_upsert_person(multi, %User{} = user, %{} = person_attrs) do
+  defp maybe_upsert_person(%User{} = user, %{} = person_attrs, actor) do
     case user.person do
       %Person{} = person ->
         changeset = Ash.Changeset.for_update(person, :edit, person_attrs)
-        Ash.Multi.update(multi, :person, changeset, domain: RbacApp.Accounts)
+        Ash.update(changeset, actor: actor, domain: RbacApp.Accounts)
 
       _ ->
-        Ash.Multi.create(
-          multi,
-          :person,
-          Person,
-          :create,
-          Map.put(person_attrs, :user_id, user.id),
-          domain: RbacApp.Accounts
-        )
+        attrs = Map.put(person_attrs, :user_id, user.id)
+        Ash.create(Person, attrs, action: :create, actor: actor, domain: RbacApp.Accounts)
     end
   end
 
-  defp add_role_assignments(multi, []), do: multi
+  defp add_role_assignments(_user, [], _actor), do: {:ok, []}
 
-  defp add_role_assignments(multi, role_ids) do
-    Enum.reduce(Enum.with_index(role_ids, 1), multi, fn {role_id, idx}, acc ->
-      Ash.Multi.create(
-        acc,
-        {:user_role, idx},
-        UserRole,
-        :assign,
-        fn %{user: user} ->
-          %{user_id: user.id, role_id: role_id}
-        end,
-        domain: RbacApp.RBAC
-      )
+  defp add_role_assignments(%User{} = user, role_ids, actor) do
+    Enum.reduce_while(role_ids, {:ok, []}, fn role_id, {:ok, acc} ->
+      case Ash.create(
+             UserRole,
+             %{user_id: user.id, role_id: role_id},
+             action: :assign,
+             actor: actor,
+             domain: RbacApp.RBAC
+           ) do
+        {:ok, assignment} -> {:cont, {:ok, [assignment | acc]}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
     end)
   end
 
@@ -170,15 +140,17 @@ defmodule RbacApp.Accounts.UserProvisioning do
       |> Ash.Query.filter(id == ^user_id)
       |> Ash.Query.load([:person, :roles])
 
-    case Ash.read_one(query, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, user} ->
-        {:ok, user}
-
-      {:error, %Ash.Error.Forbidden{}} ->
-        {:error, :forbidden}
-
-      {:error, error} ->
-        {:error, Exception.message(error)}
-    end
+    Ash.read_one(query, actor: actor, domain: RbacApp.Accounts)
   end
+
+  defp handle_transaction_result({:ok, user}), do: {:ok, user}
+
+  defp handle_transaction_result({:error, %Ash.Error.Forbidden{}}), do: {:error, :forbidden}
+
+  defp handle_transaction_result({:error, :forbidden}), do: {:error, :forbidden}
+
+  defp handle_transaction_result({:error, error}) when is_binary(error), do: {:error, error}
+
+  defp handle_transaction_result({:error, error}),
+    do: {:error, Exception.message(error)}
 end
