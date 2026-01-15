@@ -1,4 +1,4 @@
-defmodule RbacApp.Accounts.HashPassword do
+defmodule AshAuthentication.Strategy.Password.HashPassword do
   @moduledoc false
 
   use Ash.Resource.Change
@@ -14,4 +14,7 @@ defmodule RbacApp.Accounts.HashPassword do
         Ash.Changeset.force_change_attribute(changeset, :hashed_password, hashed_password)
     end
   end
+
+  @impl true
+  def has_change?, do: true
 end

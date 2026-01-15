@@ -49,7 +49,6 @@ defmodule RbacApp.Accounts.User do
     create :create do
       accept([:email, :is_active])
       argument(:password, :string, allow_nil?: false, sensitive?: true)
-      change(RbacApp.Accounts.HashPassword)
     end
 
     create :seed do
