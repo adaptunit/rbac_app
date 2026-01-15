@@ -25,6 +25,10 @@ defmodule RbacAppWeb.Admin.UsersLive do
       |> assign(:edit_user_form, build_user_edit_form())
       |> assign(:selected_user_id, nil)
       |> assign(:assignment_form, build_assignment_form())
+      |> assign(:permission_select_form, build_permission_select_form())
+      |> assign(:permission_form, build_permission_form())
+      |> assign(:permission_user, nil)
+      |> assign(:permission_error, nil)
       |> assign(:load_error, load_error)
       |> assign(:form_error, nil)
       |> assign(:edit_error, nil)
@@ -370,6 +374,105 @@ defmodule RbacAppWeb.Admin.UsersLive do
                 </button>
               </.form>
             </section>
+
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-900">User resource access</h2>
+              <p class="mt-2 text-sm text-slate-600">
+                Grant route-based CRUD access that layers on top of role permissions.
+              </p>
+
+              <.form
+                for={@permission_select_form}
+                id="user-permission-select-form"
+                phx-change="load_permission_user"
+                class="mt-4"
+              >
+                <.input
+                  field={@permission_select_form[:user_id]}
+                  type="select"
+                  label="Select user"
+                  options={@user_options}
+                  prompt="Choose a user"
+                />
+              </.form>
+
+              <%= if @permission_user do %>
+                <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Current permissions
+                    </h3>
+                    <span class="text-xs text-slate-500">
+                      {length(permission_entries(@permission_user))} entries
+                    </span>
+                  </div>
+                  <div class="mt-3 space-y-3">
+                    <%= for {resource, actions} <- permission_entries(@permission_user) do %>
+                      <div class="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div>
+                          <p class="text-sm font-semibold text-slate-900">{resource}</p>
+                          <p class="text-xs text-slate-500">{format_actions(actions)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          phx-click="remove_user_permission"
+                          phx-value-user-id={@permission_user.id}
+                          phx-value-resource={resource}
+                          class="text-xs font-semibold text-rose-600 transition hover:text-rose-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    <% end %>
+                    <p
+                      :if={permission_entries(@permission_user) == []}
+                      class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
+                    >
+                      No direct permissions yet. Add a route below.
+                    </p>
+                  </div>
+                </div>
+
+                <.form
+                  for={@permission_form}
+                  id="user-permission-form"
+                  phx-submit="add_user_permission"
+                  class="mt-6 space-y-4"
+                >
+                  <.input field={@permission_form[:user_id]} type="hidden" />
+                  <.input
+                    field={@permission_form[:resource]}
+                    type="text"
+                    label="Route / resource key"
+                    placeholder="/admin/users"
+                    required
+                  />
+                  <.input
+                    field={@permission_form[:actions]}
+                    type="select"
+                    label="Allowed actions"
+                    options={action_options()}
+                    multiple
+                    required
+                  />
+
+                  <p :if={@permission_error} class="text-sm font-semibold text-rose-600">
+                    {@permission_error}
+                  </p>
+
+                  <button
+                    type="submit"
+                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                  >
+                    Save permission
+                  </button>
+                </.form>
+              <% else %>
+                <p class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Choose a user above to review or grant direct access.
+                </p>
+              <% end %>
+            </section>
           </aside>
         </div>
       </div>
@@ -480,6 +583,76 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
+  def handle_event("load_permission_user", %{"permission_select" => %{"user_id" => user_id}}, socket) do
+    actor = socket.assigns[:current_user]
+
+    case load_user_permissions(user_id, actor) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:permission_user, user)
+         |> assign(:permission_select_form, build_permission_select_form(user.id))
+         |> assign(:permission_form, build_permission_form(%{"user_id" => user.id}))
+         |> assign(:permission_error, nil)}
+
+      {:error, error_message} ->
+        {:noreply,
+         socket
+         |> assign(:permission_user, nil)
+         |> assign(:permission_select_form, build_permission_select_form())
+         |> assign(:permission_form, build_permission_form())
+         |> assign(:permission_error, error_message)}
+    end
+  end
+
+  def handle_event("add_user_permission", %{"permission" => params}, socket) do
+    actor = socket.assigns[:current_user]
+    user_id = Map.get(params, "user_id")
+    resource = Map.get(params, "resource", "") |> String.trim()
+    actions = normalize_actions(Map.get(params, "actions"))
+
+    with {:ok, user} <- load_user_permissions(user_id, actor),
+         :ok <- validate_resource(resource),
+         :ok <- validate_actions(actions),
+         {:ok, updated_user} <- save_user_permission(user, resource, actions, actor) do
+      users = list_users(actor)
+
+      {:noreply,
+       socket
+       |> assign(:permission_user, updated_user)
+       |> assign(:permission_form, build_permission_form(%{"user_id" => user_id}))
+       |> assign(:permission_error, nil)
+       |> assign(:user_options, user_options(users))
+       |> assign(:user_count, length(users))
+       |> stream(:users, users, reset: true)
+       |> put_flash(:info, "User permission updated.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :permission_error, error_message)}
+    end
+  end
+
+  def handle_event("remove_user_permission", %{"user-id" => user_id, "resource" => resource}, socket) do
+    actor = socket.assigns[:current_user]
+
+    with {:ok, user} <- load_user_permissions(user_id, actor),
+         {:ok, updated_user} <- remove_user_permission(user, resource, actor) do
+      users = list_users(actor)
+
+      {:noreply,
+       socket
+       |> assign(:permission_user, updated_user)
+       |> assign(:permission_error, nil)
+       |> assign(:user_options, user_options(users))
+       |> assign(:user_count, length(users))
+       |> stream(:users, users, reset: true)
+       |> put_flash(:info, "Permission removed.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :permission_error, error_message)}
+    end
+  end
+
   defp build_user_form(params \\ %{}) do
     defaults = %{
       "email" => "",
@@ -582,6 +755,15 @@ defmodule RbacAppWeb.Admin.UsersLive do
     to_form(Map.merge(defaults, params), as: :assignment)
   end
 
+  defp build_permission_select_form(user_id \\ "") do
+    to_form(%{"user_id" => user_id}, as: :permission_select)
+  end
+
+  defp build_permission_form(params \\ %{}) do
+    defaults = %{"user_id" => "", "resource" => "", "actions" => []}
+    to_form(Map.merge(defaults, params), as: :permission)
+  end
+
   defp fetch_users(actor) do
     User
     |> Ash.Query.load([:person, :roles])
@@ -627,6 +809,22 @@ defmodule RbacAppWeb.Admin.UsersLive do
       User
       |> Ash.Query.filter(id == ^user_id)
       |> Ash.Query.load([:person, :roles])
+      |> Ash.read_one(domain: RbacApp.Accounts, actor: actor)
+
+    case user do
+      {:ok, nil} -> {:error, "Selected user could not be found."}
+      {:ok, user} -> {:ok, user}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
+  defp load_user_permissions("", _actor), do: {:error, "Select a user to manage permissions."}
+  defp load_user_permissions(nil, _actor), do: {:error, "Select a user to manage permissions."}
+
+  defp load_user_permissions(user_id, actor) do
+    user =
+      User
+      |> Ash.Query.filter(id == ^user_id)
       |> Ash.read_one(domain: RbacApp.Accounts, actor: actor)
 
     case user do
@@ -862,6 +1060,72 @@ defmodule RbacAppWeb.Admin.UsersLive do
       is_nil(roles) -> []
       match?(%Ash.NotLoaded{}, roles) -> []
       true -> roles
+    end
+  end
+
+  defp permission_entries(nil), do: []
+
+  defp permission_entries(%User{} = user) do
+    (user.permissions || %{})
+    |> Map.to_list()
+    |> Enum.sort_by(fn {resource, _actions} -> resource end)
+  end
+
+  defp format_actions(actions) when is_list(actions), do: Enum.join(actions, ", ")
+  defp format_actions(action), do: to_string(action)
+
+  defp action_options do
+    [
+      {"Create", "create"},
+      {"Read", "read"},
+      {"Update", "update"},
+      {"Destroy", "destroy"}
+    ]
+  end
+
+  defp validate_resource(""), do: {:error, "Route / resource key is required."}
+  defp validate_resource(_), do: :ok
+
+  defp validate_actions([]), do: {:error, "Select at least one action."}
+  defp validate_actions(_actions), do: :ok
+
+  defp normalize_actions(nil), do: []
+  defp normalize_actions(""), do: []
+
+  defp normalize_actions(actions) when is_list(actions) do
+    actions
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.filter(&Enum.any?(action_options(), fn {_label, value} -> value == &1 end))
+    |> Enum.uniq()
+  end
+
+  defp normalize_actions(action) when is_binary(action) do
+    normalize_actions([action])
+  end
+
+  defp save_user_permission(user, resource, actions, actor) do
+    permissions =
+      (user.permissions || %{})
+      |> Map.put(resource, actions)
+
+    update_user_permissions(user, permissions, actor)
+  end
+
+  defp remove_user_permission(user, resource, actor) do
+    permissions =
+      (user.permissions || %{})
+      |> Map.delete(resource)
+
+    update_user_permissions(user, permissions, actor)
+  end
+
+  defp update_user_permissions(user, permissions, actor) do
+    changeset = Ash.Changeset.for_update(user, :edit, %{permissions: permissions})
+
+    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
+      {:ok, updated_user} -> {:ok, updated_user}
+      {:error, error} -> {:error, Exception.message(error)}
     end
   end
 
