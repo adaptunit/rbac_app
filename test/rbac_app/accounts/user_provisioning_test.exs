@@ -48,4 +48,36 @@ defmodule RbacApp.Accounts.UserProvisioningTest do
     assert user.person.first_name == "Alice"
     assert Enum.any?(user.roles, &(&1.id == role.id))
   end
+
+  test "updates user and upserts person in one flow" do
+    actor = actor()
+
+    user_attrs = %{
+      email: "bob@example.com",
+      password: "TempPass123!",
+      is_active: true
+    }
+
+    person_attrs = %{
+      first_name: "Bob",
+      last_name: "Example"
+    }
+
+    {:ok, user} = UserProvisioning.provision_user(user_attrs, person_attrs, [], actor)
+
+    update_user_attrs = %{
+      email: "bob+updated@example.com"
+    }
+
+    update_person_attrs = %{
+      first_name: "Bobby",
+      last_name: "Example"
+    }
+
+    {:ok, updated_user} =
+      UserProvisioning.update_user_profile(user, update_user_attrs, update_person_attrs, actor)
+
+    assert updated_user.email == "bob+updated@example.com"
+    assert updated_user.person.first_name == "Bobby"
+  end
 end

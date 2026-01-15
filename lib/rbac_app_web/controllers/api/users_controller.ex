@@ -3,7 +3,7 @@ defmodule RbacAppWeb.Api.UsersController do
 
   require Ash.Query
 
-  alias RbacApp.Accounts.{Person, User, UserProvisioning}
+  alias RbacApp.Accounts.{User, UserProvisioning}
   alias RbacApp.RBAC.RoleAssignments
 
   def index(conn, _params) do
@@ -91,11 +91,17 @@ defmodule RbacAppWeb.Api.UsersController do
       |> put_status(:bad_request)
       |> json(%{error: "user or person payload is required"})
     else
+      person_attrs_result =
+        case person_params do
+          nil -> {:ok, nil}
+          %{} = attrs -> build_person_attrs(attrs)
+          _ -> {:error, "Invalid person payload."}
+        end
+
       with {:ok, user} <- load_user(id, actor),
            {:ok, user_attrs} <- build_user_update_attrs(user_params),
-           {:ok, _updated_user} <- maybe_update_user(user, user_attrs, actor),
-           {:ok, _person} <- maybe_upsert_person(user, person_params, actor),
-           {:ok, loaded_user} <- load_user(id, actor) do
+           {:ok, person_attrs} <- person_attrs_result,
+           {:ok, loaded_user} <- UserProvisioning.update_user_profile(user, user_attrs, person_attrs, actor) do
         json(conn, %{data: user_payload(loaded_user)})
       else
         {:error, :not_found} ->
@@ -287,50 +293,6 @@ defmodule RbacAppWeb.Api.UsersController do
        }}
     end
   end
-
-  defp update_user(user, attrs, actor) do
-    user
-    |> Ash.Changeset.for_update(:edit, attrs)
-    |> Ash.update(actor: actor, domain: RbacApp.Accounts)
-    |> handle_resource_action()
-  end
-
-  defp maybe_update_user(_user, attrs, _actor) when map_size(attrs) == 0, do: {:ok, :skipped}
-
-  defp maybe_update_user(user, attrs, actor) do
-    update_user(user, attrs, actor)
-  end
-
-  defp maybe_upsert_person(_user, nil, _actor), do: {:ok, :skipped}
-
-  defp maybe_upsert_person(user, params, actor) when is_map(params) do
-    with {:ok, attrs} <- build_person_attrs(params) do
-      case user.person do
-        nil ->
-          Person
-          |> Ash.Changeset.for_create(:create, Map.put(attrs, :user_id, user.id))
-          |> Ash.create(actor: actor, domain: RbacApp.Accounts)
-          |> handle_resource_action()
-
-        %Ash.NotLoaded{} ->
-          Person
-          |> Ash.Changeset.for_create(:create, Map.put(attrs, :user_id, user.id))
-          |> Ash.create(actor: actor, domain: RbacApp.Accounts)
-          |> handle_resource_action()
-
-        person ->
-          person
-          |> Ash.Changeset.for_update(:edit, attrs)
-          |> Ash.update(actor: actor, domain: RbacApp.Accounts)
-          |> handle_resource_action()
-      end
-    end
-  end
-
-  defp handle_resource_action({:ok, result}), do: {:ok, result}
-  defp handle_resource_action(:ok), do: {:ok, :ok}
-  defp handle_resource_action({:error, %Ash.Error.Forbidden{}}), do: {:error, :forbidden}
-  defp handle_resource_action({:error, error}), do: {:error, error}
 
   defp validate_name("", label), do: {:error, "#{label} is required for the profile."}
   defp validate_name(_value, _label), do: :ok
