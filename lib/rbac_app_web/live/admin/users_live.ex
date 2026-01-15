@@ -4,7 +4,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
   require Ash.Query
 
   alias RbacApp.Accounts.{Person, User}
-  alias RbacApp.RBAC.{Role, UserRole}
+  alias RbacApp.RBAC.{Role, RoleAssignments}
 
   def mount(_params, _session, socket) do
     actor = socket.assigns[:current_user]
@@ -534,7 +534,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
          {:ok, person_attrs} <- build_person_attrs(params),
          {:ok, user} <- create_user(user_attrs, actor),
          {:ok, _person} <- create_person(user, person_attrs, actor),
-         {:ok, _roles} <- assign_roles(user.id, Map.get(params, "role_ids"), actor) do
+         {:ok, _} <- RoleAssignments.sync_user_roles(user.id, Map.get(params, "role_ids"), actor) do
       users = list_users(actor)
 
       {:noreply,
@@ -562,8 +562,8 @@ defmodule RbacAppWeb.Admin.UsersLive do
         {:noreply, assign(socket, :assignment_error, "Select a user to update.")}
 
       user_id ->
-        case assign_roles(user_id, Map.get(params, "role_ids"), actor) do
-          {:ok, _roles} ->
+        case RoleAssignments.sync_user_roles(user_id, Map.get(params, "role_ids"), actor) do
+          {:ok, _} ->
             users = list_users(actor)
 
             {:noreply,
@@ -1037,63 +1037,6 @@ defmodule RbacAppWeb.Admin.UsersLive do
       {:error, error} -> {:error, Exception.message(error)}
     end
   end
-
-  defp assign_roles(user_id, role_ids, actor) do
-    role_ids = normalize_role_ids(role_ids)
-
-    existing_roles =
-      UserRole
-      |> Ash.Query.filter(user_id == ^user_id)
-      |> Ash.read!(domain: RbacApp.RBAC, actor: actor)
-
-    existing_role_ids = Enum.map(existing_roles, & &1.role_id)
-    to_add = role_ids -- existing_role_ids
-    to_remove = existing_role_ids -- role_ids
-
-    with {:ok, _} <- create_role_links(user_id, to_add, actor),
-         {:ok, _} <- remove_role_links(existing_roles, to_remove, actor) do
-      {:ok, :updated}
-    end
-  rescue
-    error -> {:error, Exception.message(error)}
-  end
-
-  defp create_role_links(_user_id, [], _actor), do: {:ok, :skipped}
-
-  defp create_role_links(user_id, role_ids, actor) do
-    role_ids
-    |> Enum.reduce_while({:ok, :created}, fn role_id, _acc ->
-      changeset = Ash.Changeset.for_create(UserRole, :assign, %{user_id: user_id, role_id: role_id})
-
-      case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC) do
-        {:ok, _} -> {:cont, {:ok, :created}}
-        {:error, error} -> {:halt, {:error, Exception.message(error)}}
-      end
-    end)
-  end
-
-  defp remove_role_links(_existing_roles, [], _actor), do: {:ok, :skipped}
-
-  defp remove_role_links(existing_roles, role_ids, actor) do
-    role_ids
-    |> Enum.reduce_while({:ok, :removed}, fn role_id, _acc ->
-      case Enum.find(existing_roles, &(&1.role_id == role_id)) do
-        nil ->
-          {:cont, {:ok, :removed}}
-
-        user_role ->
-          case Ash.destroy(user_role, actor: actor, domain: RbacApp.RBAC) do
-            :ok -> {:cont, {:ok, :removed}}
-            {:error, error} -> {:halt, {:error, Exception.message(error)}}
-          end
-      end
-    end)
-  end
-
-  defp normalize_role_ids(nil), do: []
-  defp normalize_role_ids(""), do: []
-  defp normalize_role_ids(role_ids) when is_list(role_ids), do: Enum.reject(role_ids, &(&1 == ""))
-  defp normalize_role_ids(role_id), do: [role_id]
 
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
