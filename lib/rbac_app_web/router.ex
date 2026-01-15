@@ -54,6 +54,7 @@ defmodule RbacAppWeb.Router do
       live("/admin", Admin.DashboardLive, :index)
       live("/admin/users", Admin.UsersLive, :index)
       live("/admin/roles", Admin.RolesLive, :index)
+      live("/admin/access", Admin.AccessLive, :index)
     end
   end
 
