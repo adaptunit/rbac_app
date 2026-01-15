@@ -3,7 +3,7 @@ defmodule RbacAppWeb.Api.UsersController do
 
   require Ash.Query
 
-  alias RbacApp.Accounts.{Person, User}
+  alias RbacApp.Accounts.{Person, User, UserProvisioning}
   alias RbacApp.RBAC.RoleAssignments
 
   def index(conn, _params) do
@@ -44,11 +44,16 @@ defmodule RbacAppWeb.Api.UsersController do
     person_params = Map.get(params, "person")
     role_ids = Map.get(params, "role_ids")
 
+    person_attrs_result =
+      case person_params do
+        nil -> {:ok, nil}
+        %{} = attrs -> build_person_attrs(attrs)
+        _ -> {:error, "Invalid person payload."}
+      end
+
     with {:ok, user_attrs} <- build_user_attrs(user_params),
-         {:ok, user} <- create_user(user_attrs, actor),
-         {:ok, _person} <- maybe_create_person(user, person_params, actor),
-         {:ok, _} <- RoleAssignments.sync_user_roles(user.id, role_ids, actor),
-         {:ok, loaded_user} <- load_user(user.id, actor) do
+         {:ok, person_attrs} <- person_attrs_result,
+         {:ok, loaded_user} <- UserProvisioning.provision_user(user_attrs, person_attrs, role_ids, actor) do
       conn
       |> put_status(:created)
       |> json(%{data: user_payload(loaded_user)})
@@ -283,13 +288,6 @@ defmodule RbacAppWeb.Api.UsersController do
     end
   end
 
-  defp create_user(attrs, actor) do
-    User
-    |> Ash.Changeset.for_create(:create, attrs)
-    |> Ash.create(actor: actor, domain: RbacApp.Accounts)
-    |> handle_resource_action()
-  end
-
   defp update_user(user, attrs, actor) do
     user
     |> Ash.Changeset.for_update(:edit, attrs)
@@ -301,17 +299,6 @@ defmodule RbacAppWeb.Api.UsersController do
 
   defp maybe_update_user(user, attrs, actor) do
     update_user(user, attrs, actor)
-  end
-
-  defp maybe_create_person(_user, nil, _actor), do: {:ok, :skipped}
-
-  defp maybe_create_person(user, params, actor) when is_map(params) do
-    with {:ok, attrs} <- build_person_attrs(params) do
-      Person
-      |> Ash.Changeset.for_create(:create, Map.put(attrs, :user_id, user.id))
-      |> Ash.create(actor: actor, domain: RbacApp.Accounts)
-      |> handle_resource_action()
-    end
   end
 
   defp maybe_upsert_person(_user, nil, _actor), do: {:ok, :skipped}
