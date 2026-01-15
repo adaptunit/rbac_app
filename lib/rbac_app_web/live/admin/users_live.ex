@@ -3,11 +3,11 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   require Ash.Query
 
-  alias RbacApp.Accounts.{Person, User, UserProvisioning}
+  alias RbacApp.Accounts.{User, UserProvisioning}
   alias RbacApp.RBAC.{Role, RoleAssignments}
 
   def mount(_params, _session, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
     {roles, roles_error} = fetch_roles(actor)
     {users, users_error} = fetch_users(actor)
     load_error = combine_errors([roles_error, users_error])
@@ -29,6 +29,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
       |> assign(:permission_form, build_permission_form())
       |> assign(:permission_user, nil)
       |> assign(:permission_error, nil)
+      |> assign(:current_user, actor)
       |> assign(:load_error, load_error)
       |> assign(:form_error, nil)
       |> assign(:edit_error, nil)
@@ -528,14 +529,13 @@ defmodule RbacAppWeb.Admin.UsersLive do
   end
 
   def handle_event("create_user", %{"user" => params}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
     role_ids = normalize_role_ids(Map.get(params, "role_ids"))
 
-    with {:ok, user_attrs} <- build_user_attrs(params),
+    with :ok <- validate_role_ids(role_ids),
+         {:ok, user_attrs} <- build_user_attrs(params),
          {:ok, person_attrs} <- build_person_attrs(params),
-         {:ok, user} <- create_user(user_attrs, actor),
-         {:ok, _person} <- create_person(user, person_attrs, actor),
-         {:ok, _} <- maybe_sync_user_roles(user, role_ids, actor) do
+         {:ok, _user} <- UserProvisioning.provision_user(user_attrs, person_attrs, role_ids, actor) do
       users = list_users(actor)
 
       {:noreply,
@@ -547,6 +547,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
        |> stream(:users, users, reset: true)
        |> put_flash(:info, "User created and roles assigned.")}
     else
+      {:error, :forbidden} ->
+        {:noreply, assign(socket, :form_error, "You don't have permission to create users.")}
+
       {:error, error_message} ->
         {:noreply, assign(socket, :form_error, error_message)}
     end
@@ -863,11 +866,8 @@ defmodule RbacAppWeb.Admin.UsersLive do
     normalize_role_ids([role_id])
   end
 
-  defp maybe_sync_user_roles(_user, [], _actor), do: {:ok, :skipped}
-
-  defp maybe_sync_user_roles(user, role_ids, actor) do
-    RoleAssignments.sync_user_roles(user.id, role_ids, actor)
-  end
+  defp validate_role_ids([]), do: {:error, "Select at least one role for the new user."}
+  defp validate_role_ids(_role_ids), do: :ok
 
   defp load_user_for_edit("", _actor), do: {:error, "Select a user to edit."}
   defp load_user_for_edit(nil, _actor), do: {:error, "Select a user to edit."}
@@ -1017,36 +1017,10 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
-  defp create_user(attrs, actor) do
-    {password, user_attrs} = Map.pop(attrs, :password)
+  defp refresh_actor(nil), do: nil
 
-    changeset =
-      User
-      |> Ash.Changeset.new()
-      |> maybe_set_password_argument(password)
-      |> Ash.Changeset.for_create(:create, user_attrs)
-
-    case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, user} -> {:ok, user}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
-  end
-
-  defp maybe_set_password_argument(changeset, nil), do: changeset
-
-  defp maybe_set_password_argument(changeset, password) do
-    Ash.Changeset.set_argument(changeset, :password, password)
-  end
-
-  defp create_person(user, attrs, actor) do
-    changeset =
-      Person
-      |> Ash.Changeset.for_create(:create, Map.put(attrs, :user_id, user.id))
-
-    case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, person} -> {:ok, person}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
+  defp refresh_actor(%User{} = actor) do
+    Ash.load!(actor, :roles, domain: RbacApp.RBAC, authorize?: false)
   end
 
   defp blank_to_nil(""), do: nil
