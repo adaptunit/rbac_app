@@ -20,8 +20,12 @@ defmodule RbacAppWeb.Admin.UsersLive do
       |> assign(:user_options, user_options(users))
       |> assign(:user_count, length(users))
       |> assign(:user_form, build_user_form())
+      |> assign(:edit_user_select_form, build_user_select_form())
+      |> assign(:edit_user_form, build_user_edit_form())
+      |> assign(:selected_user_id, nil)
       |> assign(:assignment_form, build_assignment_form())
       |> assign(:form_error, nil)
+      |> assign(:edit_error, nil)
       |> assign(:assignment_error, nil)
       |> stream(:users, users)
 
@@ -216,6 +220,103 @@ defmodule RbacAppWeb.Admin.UsersLive do
             </section>
 
             <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-900">Edit user profile</h2>
+              <p class="mt-2 text-sm text-slate-600">
+                Update contact, identity, and activation settings for an existing account.
+              </p>
+
+              <.form
+                for={@edit_user_select_form}
+                id="user-edit-select-form"
+                phx-change="load_user"
+                class="mt-4"
+              >
+                <.input
+                  field={@edit_user_select_form[:user_id]}
+                  type="select"
+                  label="Select user"
+                  options={@user_options}
+                  prompt="Choose a user"
+                />
+              </.form>
+
+              <%= if @selected_user_id do %>
+                <.form for={@edit_user_form} id="user-edit-form" phx-submit="update_user" class="mt-6 space-y-6">
+                  <.input field={@edit_user_form[:id]} type="hidden" />
+                  <div class="space-y-4">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Account credentials
+                    </h3>
+                    <.input field={@edit_user_form[:email]} type="email" label="Work email" required />
+                    <.input field={@edit_user_form[:is_active]} type="checkbox" label="Account active" />
+                  </div>
+
+                  <div class="space-y-4">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Identity details
+                    </h3>
+                    <.input field={@edit_user_form[:first_name]} type="text" label="First name" required />
+                    <.input field={@edit_user_form[:middle_name]} type="text" label="Middle name" />
+                    <.input field={@edit_user_form[:last_name]} type="text" label="Last name" required />
+                    <.input field={@edit_user_form[:gender]} type="text" label="Gender" />
+                    <.input field={@edit_user_form[:birthdate]} type="date" label="Birthdate" />
+                    <.input field={@edit_user_form[:nationality]} type="text" label="Nationality" />
+                  </div>
+
+                  <div class="space-y-4">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Contact & address
+                    </h3>
+                    <.input field={@edit_user_form[:phone]} type="tel" label="Primary phone" />
+                    <.input field={@edit_user_form[:phone_alt]} type="tel" label="Secondary phone" />
+                    <.input field={@edit_user_form[:email_alt]} type="email" label="Secondary email" />
+                    <.input field={@edit_user_form[:address_line1]} type="text" label="Address line 1" />
+                    <.input field={@edit_user_form[:address_line2]} type="text" label="Address line 2" />
+                    <.input field={@edit_user_form[:city]} type="text" label="City" />
+                    <.input field={@edit_user_form[:region]} type="text" label="Region/State" />
+                    <.input field={@edit_user_form[:postal_code]} type="text" label="Postal code" />
+                    <.input field={@edit_user_form[:country]} type="text" label="Country" />
+                  </div>
+
+                  <div class="space-y-4">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Extended profile
+                    </h3>
+                    <.input
+                      field={@edit_user_form[:emergency_contact]}
+                      type="textarea"
+                      label="Emergency contact (JSON)"
+                      rows="4"
+                    />
+                    <.input
+                      field={@edit_user_form[:children]}
+                      type="textarea"
+                      label="Children (JSON array)"
+                      rows="4"
+                    />
+                    <.input field={@edit_user_form[:notes]} type="textarea" label="Notes" rows="3" />
+                    <.input field={@edit_user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                  </div>
+
+                  <p :if={@edit_error} class="mt-3 text-sm font-semibold text-rose-600">
+                    {@edit_error}
+                  </p>
+
+                  <button
+                    type="submit"
+                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                  >
+                    Save updates
+                  </button>
+                </.form>
+              <% else %>
+                <p class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Choose a user above to begin editing their profile and account status.
+                </p>
+              <% end %>
+            </section>
+
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 class="text-lg font-semibold text-slate-900">Assign roles</h2>
               <p class="mt-2 text-sm text-slate-600">
                 Update assignments without leaving this page.
@@ -315,6 +416,55 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
+  def handle_event("load_user", %{"edit_select" => %{"user_id" => user_id}}, socket) do
+    actor = socket.assigns[:current_user]
+
+    case load_user_for_edit(user_id, actor) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:selected_user_id, user.id)
+         |> assign(:edit_user_form, build_user_edit_form(user))
+         |> assign(:edit_user_select_form, build_user_select_form(user.id))
+         |> assign(:edit_error, nil)}
+
+      {:error, error_message} ->
+        {:noreply,
+         socket
+         |> assign(:selected_user_id, nil)
+         |> assign(:edit_user_form, build_user_edit_form())
+         |> assign(:edit_user_select_form, build_user_select_form())
+         |> assign(:edit_error, error_message)}
+    end
+  end
+
+  def handle_event("update_user", %{"user_edit" => params}, socket) do
+    actor = socket.assigns[:current_user]
+    user_id = Map.get(params, "id")
+
+    with {:ok, user} <- load_user_for_edit(user_id, actor),
+         {:ok, user_attrs} <- build_user_edit_attrs(params),
+         {:ok, person_attrs} <- build_person_attrs(params),
+         {:ok, _user} <- update_user(user, user_attrs, actor),
+         {:ok, _person} <- upsert_person(user, person_attrs, actor),
+         {:ok, edited_user} <- load_user_for_edit(user_id, actor) do
+      users = list_users(actor)
+
+      {:noreply,
+       socket
+       |> assign(:edit_user_form, build_user_edit_form(edited_user))
+       |> assign(:edit_user_select_form, build_user_select_form(user_id))
+       |> assign(:edit_error, nil)
+       |> assign(:user_options, user_options(users))
+       |> assign(:user_count, length(users))
+       |> stream(:users, users, reset: true)
+       |> put_flash(:info, "User profile updated.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :edit_error, error_message)}
+    end
+  end
+
   defp build_user_form(params \\ %{}) do
     defaults = %{
       "email" => "",
@@ -345,6 +495,73 @@ defmodule RbacAppWeb.Admin.UsersLive do
     to_form(Map.merge(defaults, params), as: :user)
   end
 
+  defp build_user_select_form(user_id \\ "") do
+    to_form(%{"user_id" => user_id}, as: :edit_select)
+  end
+
+  defp build_user_edit_form(user \\ nil) do
+    defaults = %{
+      "id" => "",
+      "email" => "",
+      "first_name" => "",
+      "middle_name" => "",
+      "last_name" => "",
+      "gender" => "",
+      "birthdate" => "",
+      "nationality" => "",
+      "phone" => "",
+      "phone_alt" => "",
+      "email_alt" => "",
+      "address_line1" => "",
+      "address_line2" => "",
+      "city" => "",
+      "region" => "",
+      "postal_code" => "",
+      "country" => "",
+      "emergency_contact" => "{}",
+      "children" => "[]",
+      "notes" => "",
+      "metadata" => "{}",
+      "is_active" => true
+    }
+
+    form_values =
+      case user do
+        nil ->
+          defaults
+
+        _ ->
+          person = user.person
+
+          Map.merge(defaults, %{
+            "id" => user.id,
+            "email" => to_string(user.email),
+            "is_active" => user.is_active,
+            "first_name" => person_value(person, :first_name),
+            "middle_name" => person_value(person, :middle_name),
+            "last_name" => person_value(person, :last_name),
+            "gender" => person_value(person, :gender),
+            "birthdate" => format_date(person && person.birthdate),
+            "nationality" => person_value(person, :nationality),
+            "phone" => person_value(person, :phone),
+            "phone_alt" => person_value(person, :phone_alt),
+            "email_alt" => person_value(person, :email_alt),
+            "address_line1" => person_value(person, :address_line1),
+            "address_line2" => person_value(person, :address_line2),
+            "city" => person_value(person, :city),
+            "region" => person_value(person, :region),
+            "postal_code" => person_value(person, :postal_code),
+            "country" => person_value(person, :country),
+            "emergency_contact" => format_json_map(person && person.emergency_contact),
+            "children" => format_json_list(person && person.children),
+            "notes" => person_value(person, :notes),
+            "metadata" => format_json_map(person && person.metadata)
+          })
+      end
+
+    to_form(form_values, as: :user_edit)
+  end
+
   defp build_assignment_form(params \\ %{}) do
     defaults = %{"user_id" => "", "role_ids" => []}
     to_form(Map.merge(defaults, params), as: :assignment)
@@ -358,6 +575,23 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   defp list_roles(actor) do
     Ash.read!(Role, domain: RbacApp.RBAC, actor: actor)
+  end
+
+  defp load_user_for_edit("", _actor), do: {:error, "Select a user to edit."}
+  defp load_user_for_edit(nil, _actor), do: {:error, "Select a user to edit."}
+
+  defp load_user_for_edit(user_id, actor) do
+    user =
+      User
+      |> Ash.Query.filter(id == ^user_id)
+      |> Ash.Query.load([:person, :roles])
+      |> Ash.read_one(domain: RbacApp.Accounts, actor: actor)
+
+    case user do
+      {:ok, nil} -> {:error, "Selected user could not be found."}
+      {:ok, user} -> {:ok, user}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
   end
 
   defp role_options(roles) do
@@ -426,6 +660,16 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
+  defp build_user_edit_attrs(params) do
+    email = Map.get(params, "email", "") |> String.trim()
+    is_active = Map.get(params, "is_active", "false") == "true"
+
+    cond do
+      email == "" -> {:error, "Email is required."}
+      true -> {:ok, %{email: email, is_active: is_active}}
+    end
+  end
+
   defp build_person_attrs(params) do
     first_name = Map.get(params, "first_name", "") |> String.trim()
     last_name = Map.get(params, "last_name", "") |> String.trim()
@@ -478,6 +722,28 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
     case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
       {:ok, person} -> {:ok, person}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
+  defp update_user(user, attrs, actor) do
+    changeset = Ash.Changeset.for_update(user, :edit, attrs)
+
+    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
+      {:ok, updated_user} -> {:ok, updated_user}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
+  defp upsert_person(%User{person: nil} = user, attrs, actor) do
+    create_person(user, attrs, actor)
+  end
+
+  defp upsert_person(%User{person: person}, attrs, actor) do
+    changeset = Ash.Changeset.for_update(person, :edit, attrs)
+
+    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
+      {:ok, updated_person} -> {:ok, updated_person}
       {:error, error} -> {:error, Exception.message(error)}
     end
   end
@@ -542,6 +808,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
 
+  defp person_value(nil, _field), do: ""
+  defp person_value(person, field), do: Map.get(person, field) || ""
+
   defp validate_name("", label), do: {:error, "#{label} is required for the profile."}
   defp validate_name(_value, _label), do: :ok
 
@@ -575,4 +844,15 @@ defmodule RbacAppWeb.Admin.UsersLive do
       {:error, _} -> {:error, "Children must be valid JSON."}
     end
   end
+
+  defp format_date(nil), do: ""
+  defp format_date(%Date{} = date), do: Date.to_iso8601(date)
+
+  defp format_json_map(nil), do: "{}"
+  defp format_json_map(map) when is_map(map), do: Jason.encode!(map)
+  defp format_json_map(_), do: "{}"
+
+  defp format_json_list(nil), do: "[]"
+  defp format_json_list(list) when is_list(list), do: Jason.encode!(list)
+  defp format_json_list(_), do: "[]"
 end
