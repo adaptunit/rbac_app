@@ -16,7 +16,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
 
   def mount(_params, _session, socket) do
     actor = socket.assigns[:current_user]
-    roles = list_roles(actor)
+    {roles, load_error} = fetch_roles(actor)
 
     socket =
       socket
@@ -31,6 +31,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
       |> assign(:selected_role_id, nil)
       |> assign(:roles_error, nil)
       |> assign(:edit_error, nil)
+      |> assign(:load_error, load_error)
       |> stream(:roles, roles)
 
     {:ok, socket}
@@ -48,6 +49,9 @@ defmodule RbacAppWeb.Admin.RolesLive do
             <h1 class="mt-2 text-3xl font-semibold text-slate-900">
               Define permission sets and keep access aligned to policy.
             </h1>
+            <p :if={@load_error} class="mt-3 text-sm font-semibold text-rose-600">
+              {@load_error}
+            </p>
           </div>
           <nav class="flex flex-wrap gap-3 text-sm font-semibold">
             <.link
@@ -355,8 +359,20 @@ defmodule RbacAppWeb.Admin.RolesLive do
     to_form(form_values, as: :role_edit)
   end
 
-  defp list_roles(actor) do
-    Ash.read!(Role, domain: RbacApp.RBAC, actor: actor)
+  defp fetch_roles(actor) do
+    Role
+    |> Ash.read(domain: RbacApp.RBAC, actor: actor)
+    |> handle_read_result("roles")
+  end
+
+  defp handle_read_result({:ok, records}, _label), do: {records, nil}
+
+  defp handle_read_result({:error, %Ash.Error.Forbidden{}}, label) do
+    {[], "You don't have permission to access #{label}."}
+  end
+
+  defp handle_read_result({:error, error}, label) do
+    {[], "Unable to load #{label}: #{Exception.message(error)}"}
   end
 
   defp role_options(roles) do
