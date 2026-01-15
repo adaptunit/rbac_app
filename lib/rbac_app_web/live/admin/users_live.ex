@@ -8,8 +8,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   def mount(_params, _session, socket) do
     actor = socket.assigns[:current_user]
-    roles = list_roles(actor)
-    users = list_users(actor)
+    {roles, roles_error} = fetch_roles(actor)
+    {users, users_error} = fetch_users(actor)
+    load_error = combine_errors([roles_error, users_error])
 
     socket =
       socket
@@ -24,6 +25,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
       |> assign(:edit_user_form, build_user_edit_form())
       |> assign(:selected_user_id, nil)
       |> assign(:assignment_form, build_assignment_form())
+      |> assign(:load_error, load_error)
       |> assign(:form_error, nil)
       |> assign(:edit_error, nil)
       |> assign(:assignment_error, nil)
@@ -44,6 +46,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
             <h1 class="mt-2 text-3xl font-semibold text-slate-900">
               Create users, capture identity details, and assign roles.
             </h1>
+            <p :if={@load_error} class="mt-3 text-sm font-semibold text-rose-600">
+              {@load_error}
+            </p>
           </div>
           <nav class="flex flex-wrap gap-3 text-sm font-semibold">
             <.link
@@ -567,14 +572,36 @@ defmodule RbacAppWeb.Admin.UsersLive do
     to_form(Map.merge(defaults, params), as: :assignment)
   end
 
-  defp list_users(actor) do
+  defp fetch_users(actor) do
     User
     |> Ash.Query.load([:person, :roles])
-    |> Ash.read!(domain: RbacApp.Accounts, actor: actor)
+    |> Ash.read(domain: RbacApp.Accounts, actor: actor)
+    |> handle_read_result("users")
   end
 
-  defp list_roles(actor) do
-    Ash.read!(Role, domain: RbacApp.RBAC, actor: actor)
+  defp fetch_roles(actor) do
+    Role
+    |> Ash.read(domain: RbacApp.RBAC, actor: actor)
+    |> handle_read_result("roles")
+  end
+
+  defp handle_read_result({:ok, records}, _label), do: {records, nil}
+
+  defp handle_read_result({:error, %Ash.Error.Forbidden{}}, label) do
+    {[], "You don't have permission to access #{label}."}
+  end
+
+  defp handle_read_result({:error, error}, label) do
+    {[], "Unable to load #{label}: #{Exception.message(error)}"}
+  end
+
+  defp combine_errors(errors) do
+    errors
+    |> Enum.reject(&is_nil/1)
+    |> case do
+      [] -> nil
+      messages -> Enum.join(messages, " ")
+    end
   end
 
   defp load_user_for_edit("", _actor), do: {:error, "Select a user to edit."}
