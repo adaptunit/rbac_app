@@ -579,6 +579,11 @@ defmodule RbacAppWeb.Admin.UsersLive do
     |> handle_read_result("users")
   end
 
+  defp list_users(actor) do
+    {users, _error} = fetch_users(actor)
+    users
+  end
+
   defp fetch_roles(actor) do
     Role
     |> Ash.read(domain: RbacApp.RBAC, actor: actor)

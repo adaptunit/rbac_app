@@ -365,6 +365,11 @@ defmodule RbacAppWeb.Admin.RolesLive do
     |> handle_read_result("roles")
   end
 
+  defp list_roles(actor) do
+    {roles, _error} = fetch_roles(actor)
+    roles
+  end
+
   defp handle_read_result({:ok, records}, _label), do: {records, nil}
 
   defp handle_read_result({:error, %Ash.Error.Forbidden{}}, label) do
