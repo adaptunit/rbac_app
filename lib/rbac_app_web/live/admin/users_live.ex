@@ -135,12 +135,12 @@ defmodule RbacAppWeb.Admin.UsersLive do
                 </:col>
                 <:col :let={user} label="Roles">
                   <div class="flex flex-wrap gap-2">
-                    <%= for role <- user.roles do %>
+                    <%= for role <- user_roles(user) do %>
                       <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         {role.role_name}
                       </span>
                     <% end %>
-                    <span :if={user.roles == []} class="text-xs text-slate-400">No roles yet</span>
+                    <span :if={user_roles(user) == []} class="text-xs text-slate-400">No roles yet</span>
                   </div>
                 </:col>
                 <:col :let={user} label="Updated">
@@ -645,6 +645,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
   end
 
   defp person_label(nil), do: "No profile"
+  defp person_label(%Ash.NotLoaded{}), do: "No profile"
 
   defp person_label(person) do
     [person.first_name, person.middle_name, person.last_name]
@@ -657,6 +658,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
   end
 
   defp person_contact(nil), do: "No contact details"
+  defp person_contact(%Ash.NotLoaded{}), do: "No contact details"
 
   defp person_contact(person) do
     [person.phone, person.email_alt]
@@ -669,6 +671,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
   end
 
   defp person_location(nil), do: "No location"
+  defp person_location(%Ash.NotLoaded{}), do: "No location"
 
   defp person_location(person) do
     [person.city, person.region, person.country]
@@ -851,7 +854,16 @@ defmodule RbacAppWeb.Admin.UsersLive do
   defp blank_to_nil(value), do: value
 
   defp person_value(nil, _field), do: ""
+  defp person_value(%Ash.NotLoaded{}, _field), do: ""
   defp person_value(person, field), do: Map.get(person, field) || ""
+
+  defp user_roles(%User{roles: roles}) do
+    cond do
+      is_nil(roles) -> []
+      match?(%Ash.NotLoaded{}, roles) -> []
+      true -> roles
+    end
+  end
 
   defp validate_name("", label), do: {:error, "#{label} is required for the profile."}
   defp validate_name(_value, _label), do: :ok
