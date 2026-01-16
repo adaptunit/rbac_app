@@ -20,7 +20,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
       |> assign(:role_options, role_options(roles))
       |> assign(:user_options, user_options(users))
       |> assign(:user_count, length(users))
-      |> assign(:user_form, build_user_form())
+      |> assign(:user_form, build_user_form(%{}, default_role_ids(roles)))
       |> assign(:edit_user_select_form, build_user_select_form())
       |> assign(:edit_user_form, build_user_edit_form())
       |> assign(:selected_user_id, nil)
@@ -259,9 +259,19 @@ defmodule RbacAppWeb.Admin.UsersLive do
                     label="Initial roles"
                     options={@role_options}
                     multiple
+                    size={if(@role_options == [], do: 1, else: min(length(@role_options), 5))}
+                    disabled={@role_options == []}
                   />
                   <p class="text-xs text-slate-500">
-                    Assign one or more roles to seed the user's access levels on creation.
+                    <%= if @role_options == [] do %>
+                      No roles are available yet. Create roles before provisioning users.
+                    <% else %>
+                      Select one or more roles to seed access. Hold Ctrl (Windows/Linux) or ⌘ (Mac) to
+                      choose multiple.
+                      <%= if default_role_ids(@roles) != [] do %>
+                        Leave this blank to default to the "{default_role_name(@roles)}" role.
+                      <% end %>
+                    <% end %>
                   </p>
                 </div>
 
@@ -530,17 +540,22 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   def handle_event("create_user", %{"user" => params}, socket) do
     actor = refresh_actor(socket.assigns[:current_user])
-    role_ids = normalize_role_ids(Map.get(params, "role_ids"))
 
-    with :ok <- validate_role_ids(role_ids),
+    role_ids =
+      params
+      |> Map.get("role_ids")
+      |> normalize_role_ids()
+      |> maybe_default_role_ids(socket.assigns[:roles])
+
+    with :ok <- validate_role_ids(role_ids, socket.assigns[:roles]),
          {:ok, user_attrs} <- build_user_attrs(params),
          {:ok, person_attrs} <- build_person_attrs(params),
          {:ok, _user} <- UserProvisioning.provision_user(user_attrs, person_attrs, role_ids, actor) do
       users = list_users(actor)
 
-      {:noreply,
+       {:noreply,
        socket
-       |> assign(:user_form, build_user_form())
+       |> assign(:user_form, build_user_form(%{}, default_role_ids(socket.assigns[:roles])))
        |> assign(:form_error, nil)
        |> assign(:user_options, user_options(users))
        |> assign(:user_count, length(users))
@@ -703,7 +718,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
-  defp build_user_form(params \\ %{}) do
+  defp build_user_form(params \\ %{}, default_role_ids \\ []) do
     defaults = %{
       "email" => "",
       "password" => "",
@@ -726,7 +741,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
       "children" => "[]",
       "notes" => "",
       "metadata" => "{}",
-      "role_ids" => [],
+      "role_ids" => Enum.map(default_role_ids, &to_string/1),
       "is_active" => true
     }
 
@@ -866,8 +881,15 @@ defmodule RbacAppWeb.Admin.UsersLive do
     normalize_role_ids([role_id])
   end
 
-  defp validate_role_ids([]), do: {:error, "Select at least one role for the new user."}
-  defp validate_role_ids(_role_ids), do: :ok
+  defp validate_role_ids([], roles) do
+    if roles == [] do
+      {:error, "Create at least one role before provisioning users."}
+    else
+      {:error, "Select at least one role for the new user."}
+    end
+  end
+
+  defp validate_role_ids(_role_ids, _roles), do: :ok
 
   defp load_user_for_edit("", _actor), do: {:error, "Select a user to edit."}
   defp load_user_for_edit(nil, _actor), do: {:error, "Select a user to edit."}
@@ -905,6 +927,32 @@ defmodule RbacAppWeb.Admin.UsersLive do
   defp role_options(roles) do
     Enum.map(roles, &{&1.role_name, &1.id})
   end
+
+  defp default_role_ids(roles) do
+    case default_role(roles) do
+      nil -> []
+      role -> [role.id]
+    end
+  end
+
+  defp default_role_name(roles) do
+    case default_role(roles) do
+      nil -> nil
+      role -> role.role_name
+    end
+  end
+
+  defp default_role(roles) do
+    Enum.find(roles, fn role ->
+      role.role_name
+      |> to_string()
+      |> String.downcase()
+      |> Kernel.==("user")
+    end)
+  end
+
+  defp maybe_default_role_ids([], roles), do: default_role_ids(roles)
+  defp maybe_default_role_ids(role_ids, _roles), do: role_ids
 
   defp user_options(users) do
     Enum.map(users, &{"#{&1.email} (#{person_label(&1.person)})", &1.id})
