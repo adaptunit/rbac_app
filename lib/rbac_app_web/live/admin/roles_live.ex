@@ -29,6 +29,10 @@ defmodule RbacAppWeb.Admin.RolesLive do
       |> assign(:role_select_form, build_role_select_form())
       |> assign(:role_edit_form, build_role_edit_form())
       |> assign(:selected_role_id, nil)
+      |> assign(:permission_select_form, build_permission_select_form())
+      |> assign(:permission_form, build_permission_form())
+      |> assign(:permission_role, nil)
+      |> assign(:permission_error, nil)
       |> assign(:roles_error, nil)
       |> assign(:edit_error, nil)
       |> assign(:load_error, load_error)
@@ -40,7 +44,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="space-y-8">
+      <div class="space-y-8 pb-10">
         <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-500">
@@ -98,7 +102,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
         </header>
 
         <div class="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
             <div class="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 class="text-lg font-semibold text-slate-900">Role catalog</h2>
@@ -143,7 +147,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
           </section>
 
           <aside class="space-y-6">
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section class="rounded-3xl border border-indigo-100 bg-gradient-to-br from-white via-white to-indigo-50/70 p-6 shadow-sm transition-shadow hover:shadow-md">
               <h2 class="text-lg font-semibold text-slate-900">Create role</h2>
               <p class="mt-2 text-sm text-slate-600">
                 Provide a role name and a permission map for resource operations.
@@ -165,15 +169,17 @@ defmodule RbacAppWeb.Admin.RolesLive do
                 </p>
 
                 <button
+                  id="role-create-submit"
                   type="submit"
-                  class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
+                  phx-disable-with="Creating..."
+                  class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md hover:shadow-indigo-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
-                  Save role
+                  Create role
                 </button>
               </.form>
             </section>
 
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
               <h2 class="text-lg font-semibold text-slate-900">Edit role</h2>
               <p class="mt-2 text-sm text-slate-600">
                 Refine permissions or rename a role without leaving the catalog.
@@ -213,7 +219,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
 
                   <button
                     type="submit"
-                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                   >
                     Save updates
                   </button>
@@ -221,6 +227,105 @@ defmodule RbacAppWeb.Admin.RolesLive do
               <% else %>
                 <p class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
                   Choose a role above to update its permissions and description.
+                </p>
+              <% end %>
+            </section>
+
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+              <h2 class="text-lg font-semibold text-slate-900">Role resource access</h2>
+              <p class="mt-2 text-sm text-slate-600">
+                Attach route-level CRUD permissions to a role with a structured builder.
+              </p>
+
+              <.form
+                for={@permission_select_form}
+                id="role-permission-select-form"
+                phx-change="load_permission_role"
+                class="mt-4"
+              >
+                <.input
+                  field={@permission_select_form[:role_id]}
+                  type="select"
+                  label="Select role"
+                  options={@role_options}
+                  prompt="Choose a role"
+                />
+              </.form>
+
+              <%= if @permission_role do %>
+                <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Current permissions
+                    </h3>
+                    <span class="text-xs text-slate-500">
+                      {length(permission_entries(@permission_role))} entries
+                    </span>
+                  </div>
+                  <div class="mt-3 space-y-3">
+                    <%= for {resource, actions} <- permission_entries(@permission_role) do %>
+                      <div class="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div>
+                          <p class="text-sm font-semibold text-slate-900">{resource}</p>
+                          <p class="text-xs text-slate-500">{format_actions(actions)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          phx-click="remove_role_permission"
+                          phx-value-role-id={@permission_role.id}
+                          phx-value-resource={resource}
+                          class="text-xs font-semibold text-rose-600 transition hover:text-rose-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    <% end %>
+                    <p
+                      :if={permission_entries(@permission_role) == []}
+                      class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
+                    >
+                      No permissions yet. Add a route below.
+                    </p>
+                  </div>
+                </div>
+
+                <.form
+                  for={@permission_form}
+                  id="role-permission-form"
+                  phx-submit="add_role_permission"
+                  class="mt-6 space-y-4"
+                >
+                  <.input field={@permission_form[:role_id]} type="hidden" />
+                  <.input
+                    field={@permission_form[:resource]}
+                    type="text"
+                    label="Route / resource key"
+                    placeholder="/admin/roles"
+                    required
+                  />
+                  <.input
+                    field={@permission_form[:actions]}
+                    type="select"
+                    label="Allowed actions"
+                    options={action_options()}
+                    multiple
+                    required
+                  />
+
+                  <p :if={@permission_error} class="text-sm font-semibold text-rose-600">
+                    {@permission_error}
+                  </p>
+
+                  <button
+                    type="submit"
+                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                  >
+                    Save permission
+                  </button>
+                </.form>
+              <% else %>
+                <p class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Choose a role above to review or grant access.
                 </p>
               <% end %>
             </section>
@@ -331,6 +436,76 @@ defmodule RbacAppWeb.Admin.RolesLive do
     end
   end
 
+  def handle_event("load_permission_role", %{"permission_select" => %{"role_id" => role_id}}, socket) do
+    actor = socket.assigns[:current_user]
+
+    case load_role_for_edit(role_id, actor) do
+      {:ok, role} ->
+        {:noreply,
+         socket
+         |> assign(:permission_role, role)
+         |> assign(:permission_select_form, build_permission_select_form(role.id))
+         |> assign(:permission_form, build_permission_form(%{"role_id" => role.id}))
+         |> assign(:permission_error, nil)}
+
+      {:error, error_message} ->
+        {:noreply,
+         socket
+         |> assign(:permission_role, nil)
+         |> assign(:permission_select_form, build_permission_select_form())
+         |> assign(:permission_form, build_permission_form())
+         |> assign(:permission_error, error_message)}
+    end
+  end
+
+  def handle_event("add_role_permission", %{"permission" => params}, socket) do
+    actor = socket.assigns[:current_user]
+    role_id = Map.get(params, "role_id")
+    resource = Map.get(params, "resource", "") |> String.trim()
+    actions = normalize_actions(Map.get(params, "actions"))
+
+    with {:ok, role} <- load_role_for_edit(role_id, actor),
+         :ok <- validate_resource(resource),
+         :ok <- validate_actions(actions),
+         {:ok, updated_role} <- save_role_permission(role, resource, actions, actor) do
+      roles = list_roles(actor)
+
+      {:noreply,
+       socket
+       |> assign(:permission_role, updated_role)
+       |> assign(:permission_form, build_permission_form(%{"role_id" => role_id}))
+       |> assign(:permission_error, nil)
+       |> assign(:roles_count, length(roles))
+       |> assign(:role_options, role_options(roles))
+       |> stream(:roles, roles, reset: true)
+       |> put_flash(:info, "Role permission updated.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :permission_error, error_message)}
+    end
+  end
+
+  def handle_event("remove_role_permission", %{"role-id" => role_id, "resource" => resource}, socket) do
+    actor = socket.assigns[:current_user]
+
+    with {:ok, role} <- load_role_for_edit(role_id, actor),
+         {:ok, updated_role} <- remove_role_permission(role, resource, actor) do
+      roles = list_roles(actor)
+
+      {:noreply,
+       socket
+       |> assign(:permission_role, updated_role)
+       |> assign(:permission_error, nil)
+       |> assign(:roles_count, length(roles))
+       |> assign(:role_options, role_options(roles))
+       |> stream(:roles, roles, reset: true)
+       |> put_flash(:info, "Permission removed.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :permission_error, error_message)}
+    end
+  end
+
   defp build_role_form(params \\ %{}) do
     defaults = %{
       "role_name" => "",
@@ -369,6 +544,15 @@ defmodule RbacAppWeb.Admin.RolesLive do
     to_form(form_values, as: :role_edit)
   end
 
+  defp build_permission_select_form(role_id \\ "") do
+    to_form(%{"role_id" => role_id}, as: :permission_select)
+  end
+
+  defp build_permission_form(params \\ %{}) do
+    defaults = %{"role_id" => "", "resource" => "", "actions" => []}
+    to_form(Map.merge(defaults, params), as: :permission)
+  end
+
   defp fetch_roles(actor) do
     Role
     |> Ash.read(domain: RbacApp.RBAC, actor: actor)
@@ -383,7 +567,11 @@ defmodule RbacAppWeb.Admin.RolesLive do
   defp handle_read_result({:ok, records}, _label), do: {records, nil}
 
   defp handle_read_result({:error, %Ash.Error.Forbidden{}}, label) do
-    {[], "You don't have permission to access #{label}."}
+    if label == "roles" and roles_missing?() do
+      {[], nil}
+    else
+      {[], "You don't have permission to access #{label}."}
+    end
   end
 
   defp handle_read_result({:error, error}, label) do
@@ -424,8 +612,21 @@ defmodule RbacAppWeb.Admin.RolesLive do
     changeset = Ash.Changeset.for_create(Role, :create, attrs)
 
     case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC) do
-      {:ok, role} -> {:ok, role}
-      {:error, error} -> {:error, Exception.message(error)}
+      {:ok, role} ->
+        {:ok, role}
+
+      {:error, %Ash.Error.Forbidden{} = error} ->
+        if roles_missing?() do
+          case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC, authorize?: false) do
+            {:ok, role} -> {:ok, role}
+            {:error, create_error} -> {:error, Exception.message(create_error)}
+          end
+        else
+          {:error, Exception.message(error)}
+        end
+
+      {:error, error} ->
+        {:error, Exception.message(error)}
     end
   end
 
@@ -457,6 +658,60 @@ defmodule RbacAppWeb.Admin.RolesLive do
     end
   end
 
+  defp permission_entries(nil), do: []
+
+  defp permission_entries(%Role{} = role) do
+    (role.permissions || %{})
+    |> Map.to_list()
+    |> Enum.sort_by(fn {resource, _actions} -> resource end)
+  end
+
+  defp action_options do
+    [
+      {"Create", "create"},
+      {"Read", "read"},
+      {"Update", "update"},
+      {"Destroy", "destroy"}
+    ]
+  end
+
+  defp validate_resource(""), do: {:error, "Route / resource key is required."}
+  defp validate_resource(_), do: :ok
+
+  defp validate_actions([]), do: {:error, "Select at least one action."}
+  defp validate_actions(_actions), do: :ok
+
+  defp normalize_actions(nil), do: []
+  defp normalize_actions(""), do: []
+
+  defp normalize_actions(actions) when is_list(actions) do
+    actions
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.filter(&Enum.any?(action_options(), fn {_label, value} -> value == &1 end))
+    |> Enum.uniq()
+  end
+
+  defp normalize_actions(action) when is_binary(action) do
+    normalize_actions([action])
+  end
+
+  defp save_role_permission(role, resource, actions, actor) do
+    permissions =
+      (role.permissions || %{})
+      |> Map.put(resource, actions)
+
+    update_role(role, %{permissions: permissions}, actor)
+  end
+
+  defp remove_role_permission(role, resource, actor) do
+    permissions =
+      (role.permissions || %{})
+      |> Map.delete(resource)
+
+    update_role(role, %{permissions: permissions}, actor)
+  end
+
   defp format_actions(actions) when is_list(actions), do: Enum.join(actions, ", ")
   defp format_actions(action), do: to_string(action)
 
@@ -469,6 +724,16 @@ defmodule RbacAppWeb.Admin.RolesLive do
     case Ash.update(changeset, actor: actor, domain: RbacApp.RBAC) do
       {:ok, updated_role} -> {:ok, updated_role}
       {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
+  defp roles_missing? do
+    Role
+    |> Ash.Query.limit(1)
+    |> Ash.read(domain: RbacApp.RBAC, authorize?: false)
+    |> case do
+      {:ok, []} -> true
+      _ -> false
     end
   end
 end

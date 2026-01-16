@@ -9,12 +9,12 @@ defmodule RbacAppWeb.LiveUserAuth do
   use RbacAppWeb, :verified_routes
 
   def on_mount(:live_user_optional, _params, session, socket) do
-    socket = assign_new(socket, :current_user, fn -> load_current_user(session) end)
+    socket = assign(socket, :current_user, load_current_user(session))
     {:cont, socket}
   end
 
   def on_mount(:live_user_required, _params, session, socket) do
-    socket = assign_new(socket, :current_user, fn -> load_current_user(session) end)
+    socket = assign(socket, :current_user, load_current_user(session))
 
     if socket.assigns[:current_user] do
       {:cont, socket}
@@ -24,7 +24,7 @@ defmodule RbacAppWeb.LiveUserAuth do
   end
 
   def on_mount(:live_no_user, _params, session, socket) do
-    socket = assign_new(socket, :current_user, fn -> load_current_user(session) end)
+    socket = assign(socket, :current_user, load_current_user(session))
 
     if socket.assigns[:current_user] do
       {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/")}

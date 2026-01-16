@@ -59,7 +59,23 @@ defmodule RbacApp.RBAC.Role do
   # end
 
   policies do
-    policy always() do
+    policy action_type(:read) do
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role.read"})
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*"})
+    end
+
+    policy action(:create) do
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role.create"})
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*"})
+    end
+
+    policy action(:edit) do
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role.update"})
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*"})
+    end
+
+    policy action(:destroy) do
+      authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role.destroy"})
       authorize_if({RbacApp.Auth.Checks.HasPermission, permission: "rbac.role:*"})
     end
   end

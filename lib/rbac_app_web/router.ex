@@ -21,6 +21,10 @@ defmodule RbacAppWeb.Router do
     plug(:set_actor, :user)
   end
 
+  pipeline :public_api do
+    plug(:accepts, ["json"])
+  end
+
   pipeline :graphql do
     plug(AshGraphql.Plug)
   end
@@ -84,6 +88,12 @@ defmodule RbacAppWeb.Router do
       Absinthe.Plug,
       schema: Module.concat(["RbacAppWeb.Graphql.Schema"])
     )
+  end
+
+  scope "/api", RbacAppWeb do
+    pipe_through(:public_api)
+
+    get("/permissions", PermissionController, :show)
   end
 
   if Application.compile_env(:rbac_app, :dev_routes) do

@@ -3,11 +3,11 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
   require Ash.Query
 
-  alias RbacApp.Accounts.{Person, User}
-  alias RbacApp.RBAC.{Role, UserRole}
+  alias RbacApp.Accounts.{User, UserProvisioning}
+  alias RbacApp.RBAC.{Role, RoleAssignments}
 
   def mount(_params, _session, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
     {roles, roles_error} = fetch_roles(actor)
     {users, users_error} = fetch_users(actor)
     load_error = combine_errors([roles_error, users_error])
@@ -20,11 +20,16 @@ defmodule RbacAppWeb.Admin.UsersLive do
       |> assign(:role_options, role_options(roles))
       |> assign(:user_options, user_options(users))
       |> assign(:user_count, length(users))
-      |> assign(:user_form, build_user_form())
+      |> assign(:user_form, build_user_form(%{}, default_role_ids(roles)))
       |> assign(:edit_user_select_form, build_user_select_form())
       |> assign(:edit_user_form, build_user_edit_form())
       |> assign(:selected_user_id, nil)
       |> assign(:assignment_form, build_assignment_form())
+      |> assign(:permission_select_form, build_permission_select_form())
+      |> assign(:permission_form, build_permission_form())
+      |> assign(:permission_user, nil)
+      |> assign(:permission_error, nil)
+      |> assign(:current_user, actor)
       |> assign(:load_error, load_error)
       |> assign(:form_error, nil)
       |> assign(:edit_error, nil)
@@ -37,61 +42,76 @@ defmodule RbacAppWeb.Admin.UsersLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="space-y-8">
-        <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-500">
-              User directory
-            </p>
-            <h1 class="mt-2 text-3xl font-semibold text-slate-900">
-              Create users, capture identity details, and assign roles.
-            </h1>
-            <p :if={@load_error} class="mt-3 text-sm font-semibold text-rose-600">
-              {@load_error}
-            </p>
+      <div class="space-y-10">
+        <header class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.35em] text-indigo-500">
+                User directory
+              </p>
+              <h1 class="mt-2 text-3xl font-semibold text-slate-900">
+                Create users, capture identity details, and assign roles.
+              </h1>
+              <p class="mt-2 text-sm text-slate-600">
+                Manage onboarding, profile maintenance, and resource access from a unified control panel.
+              </p>
+              <p :if={@load_error} class="mt-3 text-sm font-semibold text-rose-600">
+                {@load_error}
+              </p>
+            </div>
+            <nav class="w-full lg:w-auto">
+              <ul class="menu menu-horizontal w-full rounded-full bg-slate-50 p-1 text-sm font-semibold lg:w-auto">
+                <li>
+                  <.link
+                    navigate={~p"/admin"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :dashboard && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :dashboard && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Overview
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    navigate={~p"/admin/users"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :users && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :users && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Users
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    navigate={~p"/admin/roles"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :roles && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :roles && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Roles
+                  </.link>
+                </li>
+                <li>
+                  <.link
+                    navigate={~p"/admin/access"}
+                    class={[
+                      "rounded-full px-4 py-2 transition",
+                      @page == :access && "active bg-indigo-500 text-white shadow-sm",
+                      @page != :access && "text-slate-600 hover:bg-white"
+                    ]}
+                  >
+                    Access UI
+                  </.link>
+                </li>
+              </ul>
+            </nav>
           </div>
-          <nav class="flex flex-wrap gap-3 text-sm font-semibold">
-            <.link
-              navigate={~p"/admin"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :dashboard && "bg-indigo-500 text-white shadow",
-                @page != :dashboard && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Overview
-            </.link>
-            <.link
-              navigate={~p"/admin/users"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :users && "bg-indigo-500 text-white shadow",
-                @page != :users && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Users
-            </.link>
-            <.link
-              navigate={~p"/admin/roles"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :roles && "bg-indigo-500 text-white shadow",
-                @page != :roles && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Roles
-            </.link>
-            <.link
-              navigate={~p"/admin/access"}
-              class={[
-                "rounded-full px-4 py-2 transition",
-                @page == :access && "bg-indigo-500 text-white shadow",
-                @page != :access && "bg-white text-slate-600 hover:bg-slate-100"
-              ]}
-            >
-              Access UI
-            </.link>
-          </nav>
         </header>
 
         <div class="grid gap-6 xl:grid-cols-[2fr_1fr]">
@@ -152,83 +172,114 @@ defmodule RbacAppWeb.Admin.UsersLive do
 
           <aside class="space-y-6">
             <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 class="text-lg font-semibold text-slate-900">Create user</h2>
-              <p class="mt-2 text-sm text-slate-600">
-                Register a new account and capture identity details in one flow.
-              </p>
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 class="text-lg font-semibold text-slate-900">Create user</h2>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Register a new account and capture identity details in one flow.
+                  </p>
+                </div>
+                <span class="badge badge-outline border-indigo-200 text-indigo-600">New account</span>
+              </div>
 
-              <.form for={@user_form} id="user-create-form" phx-submit="create_user" class="mt-4 space-y-6">
+              <.form for={@user_form} id="user-create-form" phx-submit="create_user" class="mt-6 space-y-6">
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Account credentials
                   </h3>
-                  <.input field={@user_form[:email]} type="email" label="Work email" required />
-                  <.input field={@user_form[:password]} type="password" label="Temporary password" required />
-                  <.input field={@user_form[:is_active]} type="checkbox" label="Activate immediately" />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <.input field={@user_form[:email]} type="email" label="Work email" required />
+                    <.input field={@user_form[:password]} type="password" label="Temporary password" required />
+                    <div class="sm:col-span-2">
+                      <.input field={@user_form[:is_active]} type="checkbox" label="Activate immediately" />
+                    </div>
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Identity details
                   </h3>
-                  <.input field={@user_form[:first_name]} type="text" label="First name" required />
-                  <.input field={@user_form[:middle_name]} type="text" label="Middle name" />
-                  <.input field={@user_form[:last_name]} type="text" label="Last name" required />
-                  <.input field={@user_form[:gender]} type="text" label="Gender" />
-                  <.input field={@user_form[:birthdate]} type="date" label="Birthdate" />
-                  <.input field={@user_form[:nationality]} type="text" label="Nationality" />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <.input field={@user_form[:first_name]} type="text" label="First name" required />
+                    <.input field={@user_form[:middle_name]} type="text" label="Middle name" />
+                    <.input field={@user_form[:last_name]} type="text" label="Last name" required />
+                    <.input field={@user_form[:gender]} type="text" label="Gender" />
+                    <.input field={@user_form[:birthdate]} type="date" label="Birthdate" />
+                    <.input field={@user_form[:nationality]} type="text" label="Nationality" />
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Contact & address
                   </h3>
-                  <.input field={@user_form[:phone]} type="tel" label="Primary phone" />
-                  <.input field={@user_form[:phone_alt]} type="tel" label="Secondary phone" />
-                  <.input field={@user_form[:email_alt]} type="email" label="Secondary email" />
-                  <.input field={@user_form[:address_line1]} type="text" label="Address line 1" />
-                  <.input field={@user_form[:address_line2]} type="text" label="Address line 2" />
-                  <.input field={@user_form[:city]} type="text" label="City" />
-                  <.input field={@user_form[:region]} type="text" label="Region/State" />
-                  <.input field={@user_form[:postal_code]} type="text" label="Postal code" />
-                  <.input field={@user_form[:country]} type="text" label="Country" />
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <.input field={@user_form[:phone]} type="tel" label="Primary phone" />
+                    <.input field={@user_form[:phone_alt]} type="tel" label="Secondary phone" />
+                    <.input field={@user_form[:email_alt]} type="email" label="Secondary email" />
+                    <.input field={@user_form[:address_line1]} type="text" label="Address line 1" />
+                    <.input field={@user_form[:address_line2]} type="text" label="Address line 2" />
+                    <.input field={@user_form[:city]} type="text" label="City" />
+                    <.input field={@user_form[:region]} type="text" label="Region/State" />
+                    <.input field={@user_form[:postal_code]} type="text" label="Postal code" />
+                    <.input field={@user_form[:country]} type="text" label="Country" />
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Extended profile
                   </h3>
-                  <.input
-                    field={@user_form[:emergency_contact]}
-                    type="textarea"
-                    label="Emergency contact (JSON)"
-                    rows="4"
-                  />
-                  <.input
-                    field={@user_form[:children]}
-                    type="textarea"
-                    label="Children (JSON array)"
-                    rows="4"
-                  />
-                  <.input field={@user_form[:notes]} type="textarea" label="Notes" rows="3" />
-                  <.input field={@user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                  <div class="grid gap-4">
+                    <.input
+                      field={@user_form[:emergency_contact]}
+                      type="textarea"
+                      label="Emergency contact (JSON)"
+                      rows="4"
+                    />
+                    <.input
+                      field={@user_form[:children]}
+                      type="textarea"
+                      label="Children (JSON array)"
+                      rows="4"
+                    />
+                    <.input field={@user_form[:notes]} type="textarea" label="Notes" rows="3" />
+                    <.input field={@user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                  </div>
                 </div>
 
                 <div class="space-y-4">
                   <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Access scope
                   </h3>
-                  <.input field={@user_form[:role_ids]} type="select" label="Initial roles" options={@role_options} multiple />
+                  <.input
+                    field={@user_form[:role_ids]}
+                    type="select"
+                    label="Initial roles"
+                    options={@role_options}
+                    multiple
+                    size={if(@role_options == [], do: 1, else: min(length(@role_options), 5))}
+                    disabled={@role_options == []}
+                  />
+                  <p class="text-xs text-slate-500">
+                    <%= if @role_options == [] do %>
+                      No roles are available yet. Create roles before provisioning users.
+                    <% else %>
+                      Select one or more roles to seed access. Hold Ctrl (Windows/Linux) or ⌘ (Mac) to
+                      choose multiple.
+                      <%= if default_role_ids(@roles) != [] do %>
+                        Leave this blank to default to the "{default_role_name(@roles)}" role.
+                      <% end %>
+                    <% end %>
+                  </p>
                 </div>
 
                 <p :if={@form_error} class="mt-3 text-sm font-semibold text-rose-600">
                   {@form_error}
                 </p>
 
-                <button
-                  type="submit"
-                  class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
-                >
+                <button type="submit" class="btn btn-primary w-full">
                   Create user
                 </button>
               </.form>
@@ -243,8 +294,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
               <.form
                 for={@edit_user_select_form}
                 id="user-edit-select-form"
+                phx-submit="load_user"
                 phx-change="load_user"
-                class="mt-4"
+                class="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
               >
                 <.input
                   field={@edit_user_select_form[:user_id]}
@@ -253,6 +305,9 @@ defmodule RbacAppWeb.Admin.UsersLive do
                   options={@user_options}
                   prompt="Choose a user"
                 />
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Load profile
+                </button>
               </.form>
 
               <%= if @selected_user_id do %>
@@ -262,65 +317,72 @@ defmodule RbacAppWeb.Admin.UsersLive do
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Account credentials
                     </h3>
-                    <.input field={@edit_user_form[:email]} type="email" label="Work email" required />
-                    <.input field={@edit_user_form[:is_active]} type="checkbox" label="Account active" />
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <.input field={@edit_user_form[:email]} type="email" label="Work email" required />
+                      <div class="sm:col-span-2">
+                        <.input field={@edit_user_form[:is_active]} type="checkbox" label="Account active" />
+                      </div>
+                    </div>
                   </div>
 
                   <div class="space-y-4">
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Identity details
                     </h3>
-                    <.input field={@edit_user_form[:first_name]} type="text" label="First name" required />
-                    <.input field={@edit_user_form[:middle_name]} type="text" label="Middle name" />
-                    <.input field={@edit_user_form[:last_name]} type="text" label="Last name" required />
-                    <.input field={@edit_user_form[:gender]} type="text" label="Gender" />
-                    <.input field={@edit_user_form[:birthdate]} type="date" label="Birthdate" />
-                    <.input field={@edit_user_form[:nationality]} type="text" label="Nationality" />
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <.input field={@edit_user_form[:first_name]} type="text" label="First name" required />
+                      <.input field={@edit_user_form[:middle_name]} type="text" label="Middle name" />
+                      <.input field={@edit_user_form[:last_name]} type="text" label="Last name" required />
+                      <.input field={@edit_user_form[:gender]} type="text" label="Gender" />
+                      <.input field={@edit_user_form[:birthdate]} type="date" label="Birthdate" />
+                      <.input field={@edit_user_form[:nationality]} type="text" label="Nationality" />
+                    </div>
                   </div>
 
                   <div class="space-y-4">
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Contact & address
                     </h3>
-                    <.input field={@edit_user_form[:phone]} type="tel" label="Primary phone" />
-                    <.input field={@edit_user_form[:phone_alt]} type="tel" label="Secondary phone" />
-                    <.input field={@edit_user_form[:email_alt]} type="email" label="Secondary email" />
-                    <.input field={@edit_user_form[:address_line1]} type="text" label="Address line 1" />
-                    <.input field={@edit_user_form[:address_line2]} type="text" label="Address line 2" />
-                    <.input field={@edit_user_form[:city]} type="text" label="City" />
-                    <.input field={@edit_user_form[:region]} type="text" label="Region/State" />
-                    <.input field={@edit_user_form[:postal_code]} type="text" label="Postal code" />
-                    <.input field={@edit_user_form[:country]} type="text" label="Country" />
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <.input field={@edit_user_form[:phone]} type="tel" label="Primary phone" />
+                      <.input field={@edit_user_form[:phone_alt]} type="tel" label="Secondary phone" />
+                      <.input field={@edit_user_form[:email_alt]} type="email" label="Secondary email" />
+                      <.input field={@edit_user_form[:address_line1]} type="text" label="Address line 1" />
+                      <.input field={@edit_user_form[:address_line2]} type="text" label="Address line 2" />
+                      <.input field={@edit_user_form[:city]} type="text" label="City" />
+                      <.input field={@edit_user_form[:region]} type="text" label="Region/State" />
+                      <.input field={@edit_user_form[:postal_code]} type="text" label="Postal code" />
+                      <.input field={@edit_user_form[:country]} type="text" label="Country" />
+                    </div>
                   </div>
 
                   <div class="space-y-4">
                     <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Extended profile
                     </h3>
-                    <.input
-                      field={@edit_user_form[:emergency_contact]}
-                      type="textarea"
-                      label="Emergency contact (JSON)"
-                      rows="4"
-                    />
-                    <.input
-                      field={@edit_user_form[:children]}
-                      type="textarea"
-                      label="Children (JSON array)"
-                      rows="4"
-                    />
-                    <.input field={@edit_user_form[:notes]} type="textarea" label="Notes" rows="3" />
-                    <.input field={@edit_user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                    <div class="grid gap-4">
+                      <.input
+                        field={@edit_user_form[:emergency_contact]}
+                        type="textarea"
+                        label="Emergency contact (JSON)"
+                        rows="4"
+                      />
+                      <.input
+                        field={@edit_user_form[:children]}
+                        type="textarea"
+                        label="Children (JSON array)"
+                        rows="4"
+                      />
+                      <.input field={@edit_user_form[:notes]} type="textarea" label="Notes" rows="3" />
+                      <.input field={@edit_user_form[:metadata]} type="textarea" label="Metadata (JSON)" rows="4" />
+                    </div>
                   </div>
 
                   <p :if={@edit_error} class="mt-3 text-sm font-semibold text-rose-600">
                     {@edit_error}
                   </p>
 
-                  <button
-                    type="submit"
-                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
-                  >
+                  <button type="submit" class="btn btn-outline w-full">
                     Save updates
                   </button>
                 </.form>
@@ -340,7 +402,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
                 for={@assignment_form}
                 id="role-assignment-form"
                 phx-submit="assign_roles"
-                class="mt-4"
+                class="mt-4 space-y-4"
               >
                 <.input
                   field={@assignment_form[:user_id]}
@@ -362,13 +424,112 @@ defmodule RbacAppWeb.Admin.UsersLive do
                   {@assignment_error}
                 </p>
 
-                <button
-                  type="submit"
-                  class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
-                >
+                <button type="submit" class="btn btn-outline w-full">
                   Save assignments
                 </button>
               </.form>
+            </section>
+
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-900">User resource access</h2>
+              <p class="mt-2 text-sm text-slate-600">
+                Grant route-based CRUD access that layers on top of role permissions.
+              </p>
+
+              <.form
+                for={@permission_select_form}
+                id="user-permission-select-form"
+                phx-submit="load_permission_user"
+                phx-change="load_permission_user"
+                class="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
+              >
+                <.input
+                  field={@permission_select_form[:user_id]}
+                  type="select"
+                  label="Select user"
+                  options={@user_options}
+                  prompt="Choose a user"
+                />
+                <button type="submit" class="btn btn-primary btn-sm">
+                  Load access
+                </button>
+              </.form>
+
+              <%= if @permission_user do %>
+                <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Current permissions
+                    </h3>
+                    <span class="text-xs text-slate-500">
+                      {length(permission_entries(@permission_user))} entries
+                    </span>
+                  </div>
+                  <ul class="list mt-3">
+                    <%= for {resource, actions} <- permission_entries(@permission_user) do %>
+                      <li class="list-row bg-white">
+                        <div class="list-col-grow">
+                          <p class="text-sm font-semibold text-slate-900">{resource}</p>
+                          <p class="text-xs text-slate-500">{format_actions(actions)}</p>
+                        </div>
+                        <div class="list-col-wrap flex items-center justify-end">
+                          <button
+                            type="button"
+                            phx-click="remove_user_permission"
+                            phx-value-user-id={@permission_user.id}
+                            phx-value-resource={resource}
+                            class="btn btn-ghost btn-xs text-rose-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </li>
+                    <% end %>
+                  </ul>
+                  <p
+                    :if={permission_entries(@permission_user) == []}
+                    class="mt-3 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500"
+                  >
+                    No direct permissions yet. Add a route below.
+                  </p>
+                </div>
+
+                <.form
+                  for={@permission_form}
+                  id="user-permission-form"
+                  phx-submit="add_user_permission"
+                  class="mt-6 space-y-4"
+                >
+                  <.input field={@permission_form[:user_id]} type="hidden" />
+                  <.input
+                    field={@permission_form[:resource]}
+                    type="text"
+                    label="Route / resource key"
+                    placeholder="/admin/users"
+                    required
+                  />
+                  <.input
+                    field={@permission_form[:actions]}
+                    type="select"
+                    label="Allowed actions"
+                    options={action_options()}
+                    multiple
+                    required
+                  />
+
+                  <p :if={@permission_error} class="text-sm font-semibold text-rose-600">
+                    {@permission_error}
+                  </p>
+
+                  <button type="submit" class="btn btn-outline w-full">
+                    Save permission
+                  </button>
+                </.form>
+              <% else %>
+                <p class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  Choose a user above to review or grant direct access.
+                </p>
+              <% end %>
             </section>
           </aside>
         </div>
@@ -378,24 +539,32 @@ defmodule RbacAppWeb.Admin.UsersLive do
   end
 
   def handle_event("create_user", %{"user" => params}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
 
-    with {:ok, user_attrs} <- build_user_attrs(params),
+    role_ids =
+      params
+      |> Map.get("role_ids")
+      |> normalize_role_ids()
+      |> maybe_default_role_ids(socket.assigns[:roles])
+
+    with :ok <- validate_role_ids(role_ids, socket.assigns[:roles]),
+         {:ok, user_attrs} <- build_user_attrs(params),
          {:ok, person_attrs} <- build_person_attrs(params),
-         {:ok, user} <- create_user(user_attrs, actor),
-         {:ok, _person} <- create_person(user, person_attrs, actor),
-         {:ok, _roles} <- assign_roles(user.id, Map.get(params, "role_ids"), actor) do
+         {:ok, _user} <- UserProvisioning.provision_user(user_attrs, person_attrs, role_ids, actor) do
       users = list_users(actor)
 
-      {:noreply,
+       {:noreply,
        socket
-       |> assign(:user_form, build_user_form())
+       |> assign(:user_form, build_user_form(%{}, default_role_ids(socket.assigns[:roles])))
        |> assign(:form_error, nil)
        |> assign(:user_options, user_options(users))
        |> assign(:user_count, length(users))
        |> stream(:users, users, reset: true)
        |> put_flash(:info, "User created and roles assigned.")}
     else
+      {:error, :forbidden} ->
+        {:noreply, assign(socket, :form_error, "You don't have permission to create users.")}
+
       {:error, error_message} ->
         {:noreply, assign(socket, :form_error, error_message)}
     end
@@ -412,8 +581,8 @@ defmodule RbacAppWeb.Admin.UsersLive do
         {:noreply, assign(socket, :assignment_error, "Select a user to update.")}
 
       user_id ->
-        case assign_roles(user_id, Map.get(params, "role_ids"), actor) do
-          {:ok, _roles} ->
+        case RoleAssignments.sync_user_roles(user_id, Map.get(params, "role_ids"), actor) do
+          {:ok, _} ->
             users = list_users(actor)
 
             {:noreply,
@@ -460,8 +629,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
     with {:ok, user} <- load_user_for_edit(user_id, actor),
          {:ok, user_attrs} <- build_user_edit_attrs(params),
          {:ok, person_attrs} <- build_person_attrs(params),
-         {:ok, _user} <- update_user(user, user_attrs, actor),
-         {:ok, _person} <- upsert_person(user, person_attrs, actor),
+         {:ok, _} <- UserProvisioning.update_user_profile(user, user_attrs, person_attrs, actor),
          {:ok, edited_user} <- load_user_for_edit(user_id, actor) do
       users = list_users(actor)
 
@@ -480,7 +648,77 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
-  defp build_user_form(params \\ %{}) do
+  def handle_event("load_permission_user", %{"permission_select" => %{"user_id" => user_id}}, socket) do
+    actor = socket.assigns[:current_user]
+
+    case load_user_permissions(user_id, actor) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:permission_user, user)
+         |> assign(:permission_select_form, build_permission_select_form(user.id))
+         |> assign(:permission_form, build_permission_form(%{"user_id" => user.id}))
+         |> assign(:permission_error, nil)}
+
+      {:error, error_message} ->
+        {:noreply,
+         socket
+         |> assign(:permission_user, nil)
+         |> assign(:permission_select_form, build_permission_select_form())
+         |> assign(:permission_form, build_permission_form())
+         |> assign(:permission_error, error_message)}
+    end
+  end
+
+  def handle_event("add_user_permission", %{"permission" => params}, socket) do
+    actor = socket.assigns[:current_user]
+    user_id = Map.get(params, "user_id")
+    resource = Map.get(params, "resource", "") |> String.trim()
+    actions = normalize_actions(Map.get(params, "actions"))
+
+    with {:ok, user} <- load_user_permissions(user_id, actor),
+         :ok <- validate_resource(resource),
+         :ok <- validate_actions(actions),
+         {:ok, updated_user} <- save_user_permission(user, resource, actions, actor) do
+      users = list_users(actor)
+
+      {:noreply,
+       socket
+       |> assign(:permission_user, updated_user)
+       |> assign(:permission_form, build_permission_form(%{"user_id" => user_id}))
+       |> assign(:permission_error, nil)
+       |> assign(:user_options, user_options(users))
+       |> assign(:user_count, length(users))
+       |> stream(:users, users, reset: true)
+       |> put_flash(:info, "User permission updated.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :permission_error, error_message)}
+    end
+  end
+
+  def handle_event("remove_user_permission", %{"user-id" => user_id, "resource" => resource}, socket) do
+    actor = socket.assigns[:current_user]
+
+    with {:ok, user} <- load_user_permissions(user_id, actor),
+         {:ok, updated_user} <- remove_user_permission(user, resource, actor) do
+      users = list_users(actor)
+
+      {:noreply,
+       socket
+       |> assign(:permission_user, updated_user)
+       |> assign(:permission_error, nil)
+       |> assign(:user_options, user_options(users))
+       |> assign(:user_count, length(users))
+       |> stream(:users, users, reset: true)
+       |> put_flash(:info, "Permission removed.")}
+    else
+      {:error, error_message} ->
+        {:noreply, assign(socket, :permission_error, error_message)}
+    end
+  end
+
+  defp build_user_form(params \\ %{}, default_role_ids \\ []) do
     defaults = %{
       "email" => "",
       "password" => "",
@@ -503,7 +741,7 @@ defmodule RbacAppWeb.Admin.UsersLive do
       "children" => "[]",
       "notes" => "",
       "metadata" => "{}",
-      "role_ids" => [],
+      "role_ids" => Enum.map(default_role_ids, &to_string/1),
       "is_active" => true
     }
 
@@ -582,6 +820,15 @@ defmodule RbacAppWeb.Admin.UsersLive do
     to_form(Map.merge(defaults, params), as: :assignment)
   end
 
+  defp build_permission_select_form(user_id \\ "") do
+    to_form(%{"user_id" => user_id}, as: :permission_select)
+  end
+
+  defp build_permission_form(params \\ %{}) do
+    defaults = %{"user_id" => "", "resource" => "", "actions" => []}
+    to_form(Map.merge(defaults, params), as: :permission)
+  end
+
   defp fetch_users(actor) do
     User
     |> Ash.Query.load([:person, :roles])
@@ -619,6 +866,31 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
+  defp normalize_role_ids(nil), do: []
+  defp normalize_role_ids(""), do: []
+
+  defp normalize_role_ids(role_ids) when is_list(role_ids) do
+    role_ids
+    |> Enum.map(&to_string/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp normalize_role_ids(role_id) do
+    normalize_role_ids([role_id])
+  end
+
+  defp validate_role_ids([], roles) do
+    if roles == [] do
+      {:error, "Create at least one role before provisioning users."}
+    else
+      {:error, "Select at least one role for the new user."}
+    end
+  end
+
+  defp validate_role_ids(_role_ids, _roles), do: :ok
+
   defp load_user_for_edit("", _actor), do: {:error, "Select a user to edit."}
   defp load_user_for_edit(nil, _actor), do: {:error, "Select a user to edit."}
 
@@ -636,9 +908,51 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
+  defp load_user_permissions("", _actor), do: {:error, "Select a user to manage permissions."}
+  defp load_user_permissions(nil, _actor), do: {:error, "Select a user to manage permissions."}
+
+  defp load_user_permissions(user_id, actor) do
+    user =
+      User
+      |> Ash.Query.filter(id == ^user_id)
+      |> Ash.read_one(domain: RbacApp.Accounts, actor: actor)
+
+    case user do
+      {:ok, nil} -> {:error, "Selected user could not be found."}
+      {:ok, user} -> {:ok, user}
+      {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
   defp role_options(roles) do
     Enum.map(roles, &{&1.role_name, &1.id})
   end
+
+  defp default_role_ids(roles) do
+    case default_role(roles) do
+      nil -> []
+      role -> [role.id]
+    end
+  end
+
+  defp default_role_name(roles) do
+    case default_role(roles) do
+      nil -> nil
+      role -> role.role_name
+    end
+  end
+
+  defp default_role(roles) do
+    Enum.find(roles, fn role ->
+      role.role_name
+      |> to_string()
+      |> String.downcase()
+      |> Kernel.==("user")
+    end)
+  end
+
+  defp maybe_default_role_ids([], roles), do: default_role_ids(roles)
+  defp maybe_default_role_ids(role_ids, _roles), do: role_ids
 
   defp user_options(users) do
     Enum.map(users, &{"#{&1.email} (#{person_label(&1.person)})", &1.id})
@@ -751,104 +1065,11 @@ defmodule RbacAppWeb.Admin.UsersLive do
     end
   end
 
-  defp create_user(attrs, actor) do
-    changeset = Ash.Changeset.for_create(User, :create, attrs)
+  defp refresh_actor(nil), do: nil
 
-    case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, user} -> {:ok, user}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
+  defp refresh_actor(%User{} = actor) do
+    Ash.load!(actor, :roles, domain: RbacApp.RBAC, authorize?: false)
   end
-
-  defp create_person(user, attrs, actor) do
-    changeset =
-      Person
-      |> Ash.Changeset.for_create(:create, Map.put(attrs, :user_id, user.id))
-
-    case Ash.create(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, person} -> {:ok, person}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
-  end
-
-  defp update_user(user, attrs, actor) do
-    changeset = Ash.Changeset.for_update(user, :edit, attrs)
-
-    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, updated_user} -> {:ok, updated_user}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
-  end
-
-  defp upsert_person(%User{person: nil} = user, attrs, actor) do
-    create_person(user, attrs, actor)
-  end
-
-  defp upsert_person(%User{person: person}, attrs, actor) do
-    changeset = Ash.Changeset.for_update(person, :edit, attrs)
-
-    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
-      {:ok, updated_person} -> {:ok, updated_person}
-      {:error, error} -> {:error, Exception.message(error)}
-    end
-  end
-
-  defp assign_roles(user_id, role_ids, actor) do
-    role_ids = normalize_role_ids(role_ids)
-
-    existing_roles =
-      UserRole
-      |> Ash.Query.filter(user_id == ^user_id)
-      |> Ash.read!(domain: RbacApp.RBAC, actor: actor)
-
-    existing_role_ids = Enum.map(existing_roles, & &1.role_id)
-    to_add = role_ids -- existing_role_ids
-    to_remove = existing_role_ids -- role_ids
-
-    with {:ok, _} <- create_role_links(user_id, to_add, actor),
-         {:ok, _} <- remove_role_links(existing_roles, to_remove, actor) do
-      {:ok, :updated}
-    end
-  rescue
-    error -> {:error, Exception.message(error)}
-  end
-
-  defp create_role_links(_user_id, [], _actor), do: {:ok, :skipped}
-
-  defp create_role_links(user_id, role_ids, actor) do
-    role_ids
-    |> Enum.reduce_while({:ok, :created}, fn role_id, _acc ->
-      changeset = Ash.Changeset.for_create(UserRole, :assign, %{user_id: user_id, role_id: role_id})
-
-      case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC) do
-        {:ok, _} -> {:cont, {:ok, :created}}
-        {:error, error} -> {:halt, {:error, Exception.message(error)}}
-      end
-    end)
-  end
-
-  defp remove_role_links(_existing_roles, [], _actor), do: {:ok, :skipped}
-
-  defp remove_role_links(existing_roles, role_ids, actor) do
-    role_ids
-    |> Enum.reduce_while({:ok, :removed}, fn role_id, _acc ->
-      case Enum.find(existing_roles, &(&1.role_id == role_id)) do
-        nil ->
-          {:cont, {:ok, :removed}}
-
-        user_role ->
-          case Ash.destroy(user_role, actor: actor, domain: RbacApp.RBAC) do
-            :ok -> {:cont, {:ok, :removed}}
-            {:error, error} -> {:halt, {:error, Exception.message(error)}}
-          end
-      end
-    end)
-  end
-
-  defp normalize_role_ids(nil), do: []
-  defp normalize_role_ids(""), do: []
-  defp normalize_role_ids(role_ids) when is_list(role_ids), do: Enum.reject(role_ids, &(&1 == ""))
-  defp normalize_role_ids(role_id), do: [role_id]
 
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
@@ -862,6 +1083,72 @@ defmodule RbacAppWeb.Admin.UsersLive do
       is_nil(roles) -> []
       match?(%Ash.NotLoaded{}, roles) -> []
       true -> roles
+    end
+  end
+
+  defp permission_entries(nil), do: []
+
+  defp permission_entries(%User{} = user) do
+    (user.permissions || %{})
+    |> Map.to_list()
+    |> Enum.sort_by(fn {resource, _actions} -> resource end)
+  end
+
+  defp format_actions(actions) when is_list(actions), do: Enum.join(actions, ", ")
+  defp format_actions(action), do: to_string(action)
+
+  defp action_options do
+    [
+      {"Create", "create"},
+      {"Read", "read"},
+      {"Update", "update"},
+      {"Destroy", "destroy"}
+    ]
+  end
+
+  defp validate_resource(""), do: {:error, "Route / resource key is required."}
+  defp validate_resource(_), do: :ok
+
+  defp validate_actions([]), do: {:error, "Select at least one action."}
+  defp validate_actions(_actions), do: :ok
+
+  defp normalize_actions(nil), do: []
+  defp normalize_actions(""), do: []
+
+  defp normalize_actions(actions) when is_list(actions) do
+    actions
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.filter(&Enum.any?(action_options(), fn {_label, value} -> value == &1 end))
+    |> Enum.uniq()
+  end
+
+  defp normalize_actions(action) when is_binary(action) do
+    normalize_actions([action])
+  end
+
+  defp save_user_permission(user, resource, actions, actor) do
+    permissions =
+      (user.permissions || %{})
+      |> Map.put(resource, actions)
+
+    update_user_permissions(user, permissions, actor)
+  end
+
+  defp remove_user_permission(user, resource, actor) do
+    permissions =
+      (user.permissions || %{})
+      |> Map.delete(resource)
+
+    update_user_permissions(user, permissions, actor)
+  end
+
+  defp update_user_permissions(user, permissions, actor) do
+    changeset = Ash.Changeset.for_update(user, :edit, %{permissions: permissions})
+
+    case Ash.update(changeset, actor: actor, domain: RbacApp.Accounts) do
+      {:ok, updated_user} -> {:ok, updated_user}
+      {:error, error} -> {:error, Exception.message(error)}
     end
   end
 
