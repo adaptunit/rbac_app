@@ -567,7 +567,11 @@ defmodule RbacAppWeb.Admin.RolesLive do
   defp handle_read_result({:ok, records}, _label), do: {records, nil}
 
   defp handle_read_result({:error, %Ash.Error.Forbidden{}}, label) do
-    {[], "You don't have permission to access #{label}."}
+    if label == "roles" and roles_missing?() do
+      {[], nil}
+    else
+      {[], "You don't have permission to access #{label}."}
+    end
   end
 
   defp handle_read_result({:error, error}, label) do
@@ -608,8 +612,21 @@ defmodule RbacAppWeb.Admin.RolesLive do
     changeset = Ash.Changeset.for_create(Role, :create, attrs)
 
     case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC) do
-      {:ok, role} -> {:ok, role}
-      {:error, error} -> {:error, Exception.message(error)}
+      {:ok, role} ->
+        {:ok, role}
+
+      {:error, %Ash.Error.Forbidden{} = error} ->
+        if roles_missing?() do
+          case Ash.create(changeset, actor: actor, domain: RbacApp.RBAC, authorize?: false) do
+            {:ok, role} -> {:ok, role}
+            {:error, create_error} -> {:error, Exception.message(create_error)}
+          end
+        else
+          {:error, Exception.message(error)}
+        end
+
+      {:error, error} ->
+        {:error, Exception.message(error)}
     end
   end
 
@@ -707,6 +724,16 @@ defmodule RbacAppWeb.Admin.RolesLive do
     case Ash.update(changeset, actor: actor, domain: RbacApp.RBAC) do
       {:ok, updated_role} -> {:ok, updated_role}
       {:error, error} -> {:error, Exception.message(error)}
+    end
+  end
+
+  defp roles_missing? do
+    Role
+    |> Ash.Query.limit(1)
+    |> Ash.read(domain: RbacApp.RBAC, authorize?: false)
+    |> case do
+      {:ok, []} -> true
+      _ -> false
     end
   end
 end
