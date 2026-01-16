@@ -44,7 +44,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="space-y-8">
+      <div class="space-y-8 pb-10">
         <header class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-500">
@@ -102,7 +102,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
         </header>
 
         <div class="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
             <div class="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 class="text-lg font-semibold text-slate-900">Role catalog</h2>
@@ -147,7 +147,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
           </section>
 
           <aside class="space-y-6">
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section class="rounded-3xl border border-indigo-100 bg-gradient-to-br from-white via-white to-indigo-50/70 p-6 shadow-sm transition-shadow hover:shadow-md">
               <h2 class="text-lg font-semibold text-slate-900">Create role</h2>
               <p class="mt-2 text-sm text-slate-600">
                 Provide a role name and a permission map for resource operations.
@@ -172,14 +172,14 @@ defmodule RbacAppWeb.Admin.RolesLive do
                   id="role-create-submit"
                   type="submit"
                   phx-disable-with="Creating..."
-                  class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
+                  class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md hover:shadow-indigo-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
                   Create role
                 </button>
               </.form>
             </section>
 
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
               <h2 class="text-lg font-semibold text-slate-900">Edit role</h2>
               <p class="mt-2 text-sm text-slate-600">
                 Refine permissions or rename a role without leaving the catalog.
@@ -219,7 +219,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
 
                   <button
                     type="submit"
-                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                    class="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                   >
                     Save updates
                   </button>
@@ -231,7 +231,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
               <% end %>
             </section>
 
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
               <h2 class="text-lg font-semibold text-slate-900">Role resource access</h2>
               <p class="mt-2 text-sm text-slate-600">
                 Attach route-level CRUD permissions to a role with a structured builder.
@@ -318,7 +318,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
 
                   <button
                     type="submit"
-                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                   >
                     Save permission
                   </button>
