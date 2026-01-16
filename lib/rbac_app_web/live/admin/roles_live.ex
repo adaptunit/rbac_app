@@ -169,10 +169,12 @@ defmodule RbacAppWeb.Admin.RolesLive do
                 </p>
 
                 <button
+                  id="role-create-submit"
                   type="submit"
+                  phx-disable-with="Creating..."
                   class="mt-4 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800"
                 >
-                  Save role
+                  Create role
                 </button>
               </.form>
             </section>
