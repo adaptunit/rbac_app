@@ -3,6 +3,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
 
   require Ash.Query
 
+  alias RbacApp.Accounts.User
   alias RbacApp.RBAC.Role
 
   @default_permissions """
@@ -15,7 +16,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   """
 
   def mount(_params, _session, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
     {roles, load_error} = fetch_roles(actor)
 
     socket =
@@ -348,7 +349,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("create_role", %{"role" => params}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
 
     with {:ok, attrs} <- build_role_attrs(params),
          {:ok, _role} <- create_role(attrs, actor) do
@@ -369,7 +370,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("delete_role", %{"id" => id}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
 
     with {:ok, _} <- delete_role(id, actor) do
       roles = list_roles(actor)
@@ -390,7 +391,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("load_role", %{"role_select" => %{"role_id" => role_id}}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
 
     case load_role_for_edit(role_id, actor) do
       {:ok, role} ->
@@ -412,7 +413,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("update_role", %{"role_edit" => params}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
     role_id = Map.get(params, "id")
 
     with {:ok, role} <- load_role_for_edit(role_id, actor),
@@ -437,7 +438,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("load_permission_role", %{"permission_select" => %{"role_id" => role_id}}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
 
     case load_role_for_edit(role_id, actor) do
       {:ok, role} ->
@@ -459,7 +460,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("add_role_permission", %{"permission" => params}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
     role_id = Map.get(params, "role_id")
     resource = Map.get(params, "resource", "") |> String.trim()
     actions = normalize_actions(Map.get(params, "actions"))
@@ -486,7 +487,7 @@ defmodule RbacAppWeb.Admin.RolesLive do
   end
 
   def handle_event("remove_role_permission", %{"role-id" => role_id, "resource" => resource}, socket) do
-    actor = socket.assigns[:current_user]
+    actor = refresh_actor(socket.assigns[:current_user])
 
     with {:ok, role} <- load_role_for_edit(role_id, actor),
          {:ok, updated_role} <- remove_role_permission(role, resource, actor) do
@@ -725,6 +726,12 @@ defmodule RbacAppWeb.Admin.RolesLive do
       {:ok, updated_role} -> {:ok, updated_role}
       {:error, error} -> {:error, Exception.message(error)}
     end
+  end
+
+  defp refresh_actor(nil), do: nil
+
+  defp refresh_actor(%User{} = actor) do
+    Ash.load!(actor, :roles, domain: RbacApp.RBAC, authorize?: false)
   end
 
   defp roles_missing? do
